@@ -1,4 +1,4 @@
-name: Build JL02 TV v2.8 APK
+name: Build JL02 TV v2.9 APK
 
 on:
   workflow_dispatch:
@@ -50,6 +50,7 @@ jobs:
         env:
           JL02_CALENDAR_URL: ""
           JL02_MS_CLIENT_ID: ${{ vars.JL02_MS_CLIENT_ID }}
+          JL02_MS_TENANT_ID: ${{ vars.JL02_MS_TENANT_ID }}
           JL02_VOICE_PROXY_URL: ${{ vars.JL02_VOICE_PROXY_URL }}
         run: gradle --no-daemon --stacktrace --warning-mode all assembleDebug
 
@@ -57,7 +58,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: JL02-TV-v2.8-MDZ-22-AB-APK
+          name: JL02-TV-v2.9-MDZ-22-AB-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
