@@ -34,7 +34,8 @@ public class MicrosoftCalendar {
   public interface Done {void accept(Result r);}
   private final Activity a;
   private final Handler main=new Handler(Looper.getMainLooper());
-  private static final String AUTH="https://login.microsoftonline.com/organizations/oauth2/v2.0/";
+  private static final String AUTH="https://login.microsoftonline.com/" +
+    (BuildConfig.MS_TENANT_ID == null || BuildConfig.MS_TENANT_ID.trim().isEmpty() ? "organizations" : BuildConfig.MS_TENANT_ID.trim()) + "/oauth2/v2.0/";
   private static final String SCOPES="offline_access Calendars.ReadBasic";
   private final SharedPreferences prefs;
   private volatile boolean canceled=false;
@@ -94,7 +95,9 @@ public class MicrosoftCalendar {
       if(!canceled)throw new Exception("Sign-in code expired. Try again.");
     }catch(Exception ex){main.post(()->showError(ex.getMessage()));}}).start();
   }
-  private void showError(String msg){new AlertDialog.Builder(a).setTitle("Microsoft 365 connection").setMessage(msg==null?"Connection failed":msg).setPositiveButton("OK",null).show();}
+  private void showError(String msg){
+    if(msg != null && msg.contains("AADSTS50059")) msg="Microsoft cannot identify your company's tenant. Ask your Microsoft 365 administrator for the Directory (tenant) ID, and add it as the GitHub Actions variable JL02_MS_TENANT_ID. Then rebuild JL02 TV.\n\nTechnical detail: "+msg;
+    new AlertDialog.Builder(a).setTitle("Microsoft 365 connection").setMessage(msg==null?"Connection failed":msg).setPositiveButton("OK",null).show();}
   void loadToday(Done done){new Thread(()->{Result result=new Result();try{
       String refresh=getRefresh();if(refresh.isEmpty())throw new Exception("Please sign in again.");
       JSONObject token=request(AUTH+"token",form("grant_type","refresh_token","client_id",BuildConfig.MS_CLIENT_ID,"refresh_token",refresh,"scope",SCOPES));

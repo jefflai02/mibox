@@ -75,7 +75,7 @@ public class MainActivity extends Activity {
     private volatile String newsNote="News loading", weatherNote="Forecast loading";
     private final List<TVApp> installedApps=new ArrayList<>();
     private SharedPreferences favoritePrefs; private MicrosoftCalendar microsoft;
-    private static class TVApp {String pkg,title; Drawable icon; Intent intent;}
+    private static class TVApp {String pkg,title; Drawable icon; Drawable banner; Intent intent;}
     private int highRain=0; private final List<String> meetings=new ArrayList<>();
     private final Runnable tick=new Runnable(){@Override public void run(){ if(time!=null) time.setText(new SimpleDateFormat("EEE, d MMM  •  HH:mm",Locale.ENGLISH).format(new Date()));ui.postDelayed(this,30000); }};
     private float uiScale(){float wd=getResources().getDisplayMetrics().widthPixels/getResources().getDisplayMetrics().density;return Math.min(1f,Math.max(.64f,wd/1280f));}
@@ -104,8 +104,8 @@ public class MainActivity extends Activity {
         time=text("",12,muted,false);time.setPadding(dp(4),0,dp(8),0);top.addView(time);
         voiceButton=action("▶  Listen to briefing",this::toggleSpeech);top.addView(voiceButton);top.addView(action("↻  Refresh",this::refreshAll));top.addView(action("▦  Calendars",this::showCalendarOptions));top.addView(action("⚙",()->startActivity(new Intent(Settings.ACTION_SETTINGS))));
         gap(root,8);
-        LinearLayout favSection=card();root.addView(favSection,new LinearLayout.LayoutParams(-1,dp(162)));
-        header(favSection,"★  FAVORITE APPS","OK to launch  •  Long OK to remove favorite");favoriteRow=horizontal();favSection.addView(favoriteRow,new LinearLayout.LayoutParams(-1,dp(105)));
+        LinearLayout favSection=card();root.addView(favSection,new LinearLayout.LayoutParams(-1,dp(175)));
+        header(favSection,"★  FAVORITE APPS","OK to launch  •  Long OK to remove favorite");favoriteRow=horizontal();favSection.addView(favoriteRow,new LinearLayout.LayoutParams(-1,dp(118)));
         gap(root,9);
         LinearLayout news=card();root.addView(news,new LinearLayout.LayoutParams(-1,dp(228)));
         LinearLayout nh=horizontal();nh.setGravity(Gravity.CENTER_VERTICAL);news.addView(nh);nh.addView(text("▣  LATEST NEWS",19,white,true),new LinearLayout.LayoutParams(0,dp(27),1));nh.addView(action("View more  ›",()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://news.google.com/home?hl=en-MY&gl=MY&ceid=MY:en")));}catch(Exception ignored){}}));
@@ -167,7 +167,8 @@ public class MainActivity extends Activity {
                     Story s=all.get(i);topHeadlines.add(s.title);
                     LinearLayout tile=vertical();tile.setPadding(dp(6),dp(4),dp(6),dp(3));tile.setBackground(shape(0xff1C2B3A));
                     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1);lp.rightMargin=dp(7);newsRows.addView(tile,lp);
-                    ImageView thumb=new ImageView(this);thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);thumb.setBackground(shape(0xff293B52));thumb.setContentDescription("Publisher image, if available");
+                    ImageView thumb=new ImageView(this);thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);thumb.setBackground(shape(0xff293B52));thumb.setContentDescription("News image, when provided by publisher");
+                    thumb.setImageDrawable(newsPlaceholder());
                     tile.addView(thumb,new LinearLayout.LayoutParams(-1,dp(67)));
                     if(s.image!=null&&s.image.startsWith("https://"))loadThumbnail(s.image,thumb); else loadOpenGraphImage(s.link,thumb);
                     TextView headline=text(s.title,12,white,true);headline.setMaxLines(2);headline.setEllipsize(TextUtils.TruncateAt.END);tile.addView(headline,new LinearLayout.LayoutParams(-1,dp(39)));
@@ -179,6 +180,12 @@ public class MainActivity extends Activity {
             }
             updateSummary();
         });
+    }
+    private android.graphics.drawable.Drawable newsPlaceholder(){
+        android.graphics.drawable.GradientDrawable fallback=new android.graphics.drawable.GradientDrawable(
+            android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+            new int[]{0xff122033,0xff29476a});
+        fallback.setCornerRadius(dp(9));return fallback;
     }
     private void loadThumbnail(String imageUrl, ImageView image){new Thread(()->{try{
         HttpURLConnection c=(HttpURLConnection)new URL(imageUrl).openConnection();c.setConnectTimeout(4500);c.setReadTimeout(4500);c.setRequestProperty("User-Agent","JL02TV/2.4");c.connect();String mime=c.getContentType();if(mime==null||!mime.startsWith("image/"))return;
@@ -198,15 +205,20 @@ public class MainActivity extends Activity {
     private void flipFavorite(String pkg){Set<String> f=favorites();if(!f.add(pkg))f.remove(pkg);favoritePrefs.edit().putStringSet("favorites",f).apply();renderApps();}
     private void renderApps(){if(favoriteRow==null||appRow==null)return;
         installedApps.clear();PackageManager pm=getPackageManager();List<ResolveInfo> found=new ArrayList<>();Intent tv=new Intent(Intent.ACTION_MAIN);tv.addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);found.addAll(pm.queryIntentActivities(tv,0));Intent other=new Intent(Intent.ACTION_MAIN);other.addCategory(Intent.CATEGORY_LAUNCHER);found.addAll(pm.queryIntentActivities(other,0));Set<String> seen=new HashSet<>();
-        for(ResolveInfo ri:found){if(ri.activityInfo==null)continue;String pkg=ri.activityInfo.packageName;if(pkg.equals(getPackageName())||!seen.add(pkg))continue;TVApp a=new TVApp();a.pkg=pkg;a.title=ri.loadLabel(pm).toString();a.icon=ri.loadIcon(pm); try {Drawable better=pm.getApplicationIcon(pkg);if(better!=null)a.icon=better;}catch(Exception ignored){}a.intent=pm.getLeanbackLaunchIntentForPackage(pkg);if(a.intent==null)a.intent=pm.getLaunchIntentForPackage(pkg);if(a.intent!=null)installedApps.add(a);}
+        for(ResolveInfo ri:found){if(ri.activityInfo==null)continue;String pkg=ri.activityInfo.packageName;if(pkg.equals(getPackageName())||!seen.add(pkg))continue;TVApp a=new TVApp();a.pkg=pkg;a.title=ri.loadLabel(pm).toString();a.icon=ri.loadIcon(pm); try {Drawable better=pm.getApplicationIcon(pkg);if(better!=null)a.icon=better;}catch(Exception ignored){}try {a.banner=pm.getApplicationBanner(pkg);}catch(Exception ignored){}a.intent=pm.getLeanbackLaunchIntentForPackage(pkg);if(a.intent==null)a.intent=pm.getLaunchIntentForPackage(pkg);if(a.intent!=null)installedApps.add(a);}
         Collections.sort(installedApps,(a,b)->a.title.compareToIgnoreCase(b.title));Set<String> f=favorites();List<TVApp> pinned=new ArrayList<>();for(TVApp a:installedApps)if(f.contains(a.pkg))pinned.add(a);
         if(pinned.isEmpty()){String[] defaults={"youtube","netflix","primevideo","disney","spotify","vlc","kodi"};for(String search:defaults){for(TVApp a:installedApps)if(a.pkg.toLowerCase(Locale.US).contains(search)&&!pinned.contains(a)){pinned.add(a);break;}if(pinned.size()>=6)break;}}
-        favoriteRow.removeAllViews();appRow.removeAllViews();for(int i=0;i<Math.min(6,pinned.size());i++){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(105),1);lp.rightMargin=dp(9);favoriteRow.addView(appTile(pinned.get(i),true),lp);}
+        favoriteRow.removeAllViews();appRow.removeAllViews();for(int i=0;i<Math.min(6,pinned.size());i++){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(118),1);lp.rightMargin=dp(9);favoriteRow.addView(appTile(pinned.get(i),true),lp);}
         if(pinned.isEmpty())favoriteRow.addView(action("Choose an app below and hold OK to add it",()->startActivity(new Intent(this,AppsActivity.class))));
         int shown=0;for(TVApp a:installedApps){if(shown>=7)break;if(f.contains(a.pkg))continue;LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(69),1);lp.rightMargin=dp(8);appRow.addView(appTile(a,false),lp);shown++;}appRow.addView(action("+ All Apps",()->startActivity(new Intent(this,AppsActivity.class))));
     }
     private FrameLayout appTile(TVApp a,boolean favorite){FrameLayout tile=new FrameLayout(this);tile.setBackground(shape(0xff121212));tile.setFocusable(true);tile.setClickable(true);
-        LinearLayout content=vertical();content.setGravity(Gravity.CENTER);content.setPadding(dp(3),dp(2),dp(3),dp(2));tile.addView(content,new FrameLayout.LayoutParams(-1,-1));ImageView icon=new ImageView(this);icon.setImageDrawable(a.icon);icon.setScaleType(ImageView.ScaleType.FIT_CENTER);content.addView(icon,new LinearLayout.LayoutParams(dp(favorite?76:41),dp(favorite?69:39)));TextView title=text(a.title,favorite?12:10,white,true);title.setGravity(Gravity.CENTER);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);content.addView(title,new LinearLayout.LayoutParams(-1,dp(26)));
+        LinearLayout content=vertical();content.setGravity(Gravity.CENTER);content.setPadding(dp(7),dp(2),dp(7),dp(2));tile.addView(content,new FrameLayout.LayoutParams(-1,-1));ImageView icon=new ImageView(this);
+        // Prefer landscape artwork supplied by Android TV applications; fall back to their official icon.
+        boolean landscape=favorite && a.banner!=null;
+        icon.setImageDrawable(landscape?a.banner:a.icon);
+        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        content.addView(icon,new LinearLayout.LayoutParams(landscape?-1:dp(favorite?90:45),dp(favorite?76:42)));TextView title=text(a.title,favorite?12:10,white,true);title.setGravity(Gravity.CENTER);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);content.addView(title,new LinearLayout.LayoutParams(-1,dp(26)));
         if(favorite){TextView star=text("★",10,0xffFFD900,true);FrameLayout.LayoutParams sp=new FrameLayout.LayoutParams(dp(17),dp(19),Gravity.TOP|Gravity.RIGHT);sp.rightMargin=dp(6);sp.topMargin=dp(3);tile.addView(star,sp);}
         tile.setOnClickListener(v->{try{startActivity(a.intent);}catch(Exception ignored){}});tile.setOnLongClickListener(v->{flipFavorite(a.pkg);return true;});tile.setOnKeyListener((v,key,e)->{if(e.getAction()==KeyEvent.ACTION_UP&&(key==KeyEvent.KEYCODE_MENU||key==KeyEvent.KEYCODE_INFO)){flipFavorite(a.pkg);return true;}return false;});tile.setOnFocusChangeListener((v,b)->{tile.setBackground(shape(b?0xff8B6900:0xff121212));tile.setScaleX(b?1.04f:1f);tile.setScaleY(b?1.04f:1f);});return tile;
     }
