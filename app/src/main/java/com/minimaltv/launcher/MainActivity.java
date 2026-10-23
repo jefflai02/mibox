@@ -76,9 +76,10 @@ public class MainActivity extends Activity {
     private static class TVApp {String pkg,title; Drawable icon; Intent intent;}
     private int highRain=0; private final List<String> meetings=new ArrayList<>();
     private final Runnable tick=new Runnable(){@Override public void run(){ if(time!=null) time.setText(new SimpleDateFormat("EEE, d MMM  •  HH:mm",Locale.ENGLISH).format(new Date()));ui.postDelayed(this,30000); }};
-    private int dp(int x){return (int)(x*getResources().getDisplayMetrics().density+.5f);}
+    private float uiScale(){float wd=getResources().getDisplayMetrics().widthPixels/getResources().getDisplayMetrics().density;return Math.min(1f,Math.max(.64f,wd/1280f));}
+    private int dp(int x){return (int)(x*uiScale()*getResources().getDisplayMetrics().density+.5f);}
     private GradientDrawable shape(int color){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(17));return d;}
-    private TextView text(String s,int sp,int color,boolean bold){TextView v=new TextView(this);v.setText(s);v.setTextSize(sp);v.setTextColor(color);if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);v.setGravity(Gravity.CENTER_VERTICAL);return v;}
+    private TextView text(String s,int sp,int color,boolean bold){TextView v=new TextView(this);v.setText(s);v.setTextSize(sp*uiScale());v.setTextColor(color);if(bold)v.setTypeface(Typeface.DEFAULT,Typeface.BOLD);v.setGravity(Gravity.CENTER_VERTICAL);return v;}
     private LinearLayout vertical(){LinearLayout x=new LinearLayout(this);x.setOrientation(1);return x;}
     private LinearLayout horizontal(){LinearLayout x=new LinearLayout(this);x.setOrientation(0);return x;}
     private void gap(LinearLayout p,int size){p.addView(new View(this),new LinearLayout.LayoutParams(1,dp(size)));}
@@ -94,36 +95,47 @@ public class MainActivity extends Activity {
     @Override public void onDestroy(){ui.removeCallbacksAndMessages(null);if(speech!=null){speech.stop();speech.shutdown();speech=null;}super.onDestroy();}
     private void build(){
         ScrollView sc=new ScrollView(this);sc.setBackgroundColor(bg);sc.setFillViewport(true);sc.setVerticalScrollBarEnabled(false);
-        LinearLayout root=vertical();root.setPadding(dp(34),dp(22),dp(34),dp(25));sc.addView(root);setContentView(sc);
-        LinearLayout top=horizontal();top.setGravity(Gravity.CENTER_VERTICAL);root.addView(top);
-        ImageView brand=new ImageView(this);brand.setImageResource(com.minimaltv.launcher.R.drawable.jl02_logo);brand.setScaleType(ImageView.ScaleType.FIT_CENTER);LinearLayout.LayoutParams brandLp=new LinearLayout.LayoutParams(dp(106),dp(68));brandLp.rightMargin=dp(16);top.addView(brand,brandLp);
-        LinearLayout greeting=vertical();top.addView(greeting,new LinearLayout.LayoutParams(0,-2,1));greeting.addView(text("JL02 TV  ·  YOUR DAILY BRIEFING",12,mint,true));
-        TextView welcome=text("Welcome home.",31,white,true);greeting.addView(welcome);
-        time=text("",14,muted,false);time.setPadding(dp(10),0,dp(16),0);top.addView(time);
-        voiceButton=action("▶  Listen to briefing",this::toggleSpeech);top.addView(voiceButton);top.addView(action("↻  Refresh",this::refreshAll));top.addView(action("▦  All Apps",()->startActivity(new Intent(this,AppsActivity.class))));top.addView(action("☷  Calendars",this::showCalendarOptions));top.addView(action("⚙",()->startActivity(new Intent(Settings.ACTION_SETTINGS))));
-        gap(root,13);
-        LinearLayout favSection=card();root.addView(favSection);header(favSection,"★  FAVORITE APPS","Press OK to launch · Hold OK to remove favorite");favoriteRow=horizontal();favSection.addView(favoriteRow);gap(root,10);
-        LinearLayout otherSection=card();root.addView(otherSection);header(otherSection,"ALL APPS · QUICK ACCESS","Hold OK to add a favorite · View all for more");appRow=horizontal();otherSection.addView(appRow);gap(root,12);renderApps();
-        LinearLayout columns=horizontal();columns.setGravity(Gravity.TOP);root.addView(columns);
-        LinearLayout news=card();columns.addView(news,new LinearLayout.LayoutParams(0,-2,46));
-        header(news,"LATEST NEWS · WITH IMAGES","Past 24 hours  •  publisher images where available");
-        newsStatus=text("Loading latest headlines…",11,mint,false);news.addView(newsStatus);newsRows=vertical();news.addView(newsRows);
-        LinearLayout.LayoutParams midp=new LinearLayout.LayoutParams(0,-2,27);midp.leftMargin=dp(12);LinearLayout middle=vertical();columns.addView(middle,midp);
-        LinearLayout weather=card();middle.addView(weather);header(weather,"KUALA LUMPUR WEATHER","Today · hourly outlook");
-        weatherNow=text("Checking forecast…",26,white,true);weather.addView(weatherNow);
-        TextView sky=text("☀  ☁  ☂",29,mint,true);sky.setGravity(Gravity.CENTER);weather.addView(sky,new LinearLayout.LayoutParams(-1,dp(36)));android.animation.ObjectAnimator pulse=android.animation.ObjectAnimator.ofFloat(sky,"alpha",0.65f,1f);pulse.setDuration(2400);pulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);pulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);pulse.start();
-        weatherStatus=text("Connecting to forecast provider",11,muted,false);weather.addView(weatherStatus);
-        hourlyTitle=text("NEXT HOURS",11,mint,true);hourlyTitle.setPadding(0,dp(12),0,0);weather.addView(hourlyTitle);
-        HorizontalScrollView hsc=new HorizontalScrollView(this);hsc.setHorizontalScrollBarEnabled(false);weather.addView(hsc);hourlyRows=horizontal();hsc.addView(hourlyRows);
-        gap(middle,12);LinearLayout forecast=card();middle.addView(forecast);header(forecast,"NEXT 3 DAYS","Daily high / low and rain probability");threeDays=vertical();forecast.addView(threeDays);
-        LinearLayout.LayoutParams rightp=new LinearLayout.LayoutParams(0,-2,27);rightp.leftMargin=dp(12);LinearLayout right=vertical();columns.addView(right,rightp);
-        LinearLayout day=card();right.addView(day);header(day,"YOUR DAY","Google + Microsoft · securely synced");
-        calendarStatus=text("Checking calendar access…",11,muted,false);day.addView(calendarStatus);scheduleRows=vertical();day.addView(scheduleRows);
-        day.addView(action("☷  Connect calendars",this::showCalendarOptions));
-        gap(right,12);LinearLayout notes=card();right.addView(notes);header(notes,"THINGS TO NOTE","Your daily briefing");summary=text("Gathering weather, news and schedule…",13,white,false);notes.addView(summary);
-        gap(root,13);LinearLayout bottom=card();root.addView(bottom);header(bottom,"QUICK LAUNCH","Your installed apps are one click away");
-        LinearLayout actions=horizontal();bottom.addView(actions);actions.addView(action("▦  All applications",()->startActivity(new Intent(this,AppsActivity.class))));actions.addView(action("◉  Wi-Fi",()->startActivity(new Intent(Settings.ACTION_WIFI_SETTINGS))));actions.addView(action("⚙  Device settings",()->startActivity(new Intent(Settings.ACTION_SETTINGS))));
-        line(root,"Remote: arrow keys to move   •   OK to open   •   Refresh for new headlines and weather   •   No advertising",11,muted);
+        LinearLayout root=vertical();root.setPadding(dp(26),dp(14),dp(26),dp(16));sc.addView(root);setContentView(sc);
+        LinearLayout top=horizontal();top.setGravity(Gravity.CENTER_VERTICAL);root.addView(top,new LinearLayout.LayoutParams(-1,dp(84)));
+        ImageView brand=new ImageView(this);brand.setImageResource(R.drawable.jl02_logo);brand.setScaleType(ImageView.ScaleType.FIT_CENTER);LinearLayout.LayoutParams bl=new LinearLayout.LayoutParams(dp(106),dp(75));bl.rightMargin=dp(20);top.addView(brand,bl);
+        LinearLayout greet=vertical();top.addView(greet,new LinearLayout.LayoutParams(0,-2,1));greet.addView(text("JL02 TV  •  YOUR DAILY BRIEFING",12,mint,true));greet.addView(text("Welcome home.",30,white,true));
+        time=text("",12,muted,false);time.setPadding(dp(4),0,dp(8),0);top.addView(time);
+        voiceButton=action("▶  Listen to briefing",this::toggleSpeech);top.addView(voiceButton);top.addView(action("↻  Refresh",this::refreshAll));top.addView(action("▦  Calendars",this::showCalendarOptions));top.addView(action("⚙",()->startActivity(new Intent(Settings.ACTION_SETTINGS))));
+        gap(root,8);
+        LinearLayout favSection=card();root.addView(favSection,new LinearLayout.LayoutParams(-1,dp(162)));
+        header(favSection,"★  FAVORITE APPS","OK to launch  •  Long OK to remove favorite");favoriteRow=horizontal();favSection.addView(favoriteRow,new LinearLayout.LayoutParams(-1,dp(105)));
+        gap(root,9);
+        LinearLayout news=card();root.addView(news,new LinearLayout.LayoutParams(-1,dp(228)));
+        LinearLayout nh=horizontal();nh.setGravity(Gravity.CENTER_VERTICAL);news.addView(nh);nh.addView(text("▣  LATEST NEWS",19,white,true),new LinearLayout.LayoutParams(0,dp(27),1));nh.addView(action("View more  ›",()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://news.google.com/home?hl=en-MY&gl=MY&ceid=MY:en")));}catch(Exception ignored){}}));
+        newsStatus=text("Updating latest headlines…",10,muted,false);news.addView(newsStatus,new LinearLayout.LayoutParams(-1,dp(21)));
+        newsRows=horizontal();news.addView(newsRows,new LinearLayout.LayoutParams(-1,dp(146)));
+        gap(root,9);
+        LinearLayout duo=horizontal();duo.setGravity(Gravity.TOP);root.addView(duo,new LinearLayout.LayoutParams(-1,dp(248)));
+        LinearLayout weather=card();duo.addView(weather,new LinearLayout.LayoutParams(0,-1,49));
+        header(weather,"☀  WEATHER · KUALA LUMPUR","Hourly outlook and next three days");
+        weatherNow=text("Loading weather…",28,white,true);weather.addView(weatherNow);
+        TextView sky=text("☁  ☀  ☂",23,mint,true);sky.setGravity(Gravity.CENTER);weather.addView(sky,new LinearLayout.LayoutParams(-1,dp(27)));
+        android.animation.ObjectAnimator pulse=android.animation.ObjectAnimator.ofFloat(sky,"alpha",.68f,1f);pulse.setDuration(2500);pulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);pulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);pulse.start();
+        weatherStatus=text("Updating forecast",10,muted,false);weather.addView(weatherStatus);
+        hourlyTitle=text("NEXT HOURS",10,mint,true);weather.addView(hourlyTitle);
+        HorizontalScrollView hsc=new HorizontalScrollView(this);hsc.setHorizontalScrollBarEnabled(false);weather.addView(hsc,new LinearLayout.LayoutParams(-1,dp(62)));hourlyRows=horizontal();hsc.addView(hourlyRows);
+        threeDays=vertical();weather.addView(threeDays);
+        LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,-1,51);rp.leftMargin=dp(10);LinearLayout calendar=card();duo.addView(calendar,rp);
+        header(calendar,"▦  CALENDAR & SCHEDULE","Google + Outlook · privacy-first");
+        LinearLayout calInner=horizontal();calendar.addView(calInner,new LinearLayout.LayoutParams(-1,0,1));
+        LinearLayout pair=vertical();pair.setPadding(dp(8),dp(5),dp(12),dp(4));calInner.addView(pair,new LinearLayout.LayoutParams(0,-1,45));
+        pair.addView(text("Connect calendars",16,white,true));line(pair,"Secure QR pairing via your phone",11,muted);
+        TextView connect=action("▦  Pair with QR",this::beginPairing);pair.addView(connect);
+        line(pair,"Requires a configured HTTPS calendar sync server. Never enter passwords on the TV.",10,muted);
+        LinearLayout agenda=vertical();calInner.addView(agenda,new LinearLayout.LayoutParams(0,-1,55));
+        agenda.addView(text("TODAY'S SCHEDULE",13,mint,true));calendarStatus=text("Checking calendars…",10,muted,false);agenda.addView(calendarStatus);
+        ScrollView listScroll=new ScrollView(this);listScroll.setVerticalScrollBarEnabled(false);agenda.addView(listScroll,new LinearLayout.LayoutParams(-1,0,1));scheduleRows=vertical();listScroll.addView(scheduleRows);
+        gap(root,9);
+        LinearLayout bottom=card();root.addView(bottom,new LinearLayout.LayoutParams(-1,dp(103)));
+        LinearLayout strip=horizontal();strip.setGravity(Gravity.CENTER_VERTICAL);bottom.addView(strip,new LinearLayout.LayoutParams(-1,-1));
+        TextView label=text("▦  ALL APPS",17,white,true);strip.addView(label,new LinearLayout.LayoutParams(dp(150),-1));
+        appRow=horizontal();strip.addView(appRow,new LinearLayout.LayoutParams(0,-1,1));
+        renderApps();
     }
     private void refreshAll(){newsStatus.setText("Updating feeds…");weatherStatus.setText("Updating forecast…");new Thread(this::fetchNews).start();new Thread(this::fetchWeather).start();loadCalendar();}
     private InputStream open(String url) throws Exception {HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setConnectTimeout(8500);c.setReadTimeout(9000);c.setRequestProperty("User-Agent","JL02TV/2.2 (Android TV)");c.setInstanceFollowRedirects(true);if(c.getResponseCode()!=200)throw new Exception("HTTP "+c.getResponseCode());return c.getInputStream();}
@@ -141,11 +153,29 @@ public class MainActivity extends Activity {
                 }
             }
         }catch(Exception ignored){} }
-        ui.post(()->{newsRows.removeAllViews();if(all.isEmpty()){newsStatus.setText("Live headlines unavailable · Check internet and retry");line(newsRows,"No cached or invented headlines are displayed.",13,muted);topHeadlines.clear();newsNote="News feeds unavailable";}else{newsStatus.setText("Updated now · news published within 24 hours");int count=0;for(Story s:all){if(count++>=8)break;LinearLayout item=horizontal();item.setGravity(Gravity.CENTER_VERTICAL);item.setPadding(dp(5),dp(7),dp(5),dp(8));
-            ImageView thumb=new ImageView(this);thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);thumb.setBackground(shape(0xff24334B));LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(dp(104),dp(67));ip.rightMargin=dp(12);item.addView(thumb,ip);
-            LinearLayout details=vertical();item.addView(details,new LinearLayout.LayoutParams(0,-2,1));details.addView(text(s.category.toUpperCase(Locale.US),10,mint,true));TextView headline=text(s.title,13,white,true);headline.setMaxLines(2);headline.setEllipsize(TextUtils.TruncateAt.END);details.addView(headline);String when=new SimpleDateFormat("HH:mm",Locale.ENGLISH).format(new Date(s.published));details.addView(text("Published "+when+" · OK to open",10,muted,false));
-            if(s.image!=null && s.image.startsWith("https://"))loadThumbnail(s.image,thumb);
-            focus(item);item.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(s.link)));}catch(Exception ignored){}});newsRows.addView(item);}topHeadlines.clear();for(int i=0;i<Math.min(5,all.size());i++)topHeadlines.add(all.get(i).title);newsNote=all.size()+" recent news headlines available";}updateSummary();});
+        ui.post(()->{
+            newsRows.removeAllViews();topHeadlines.clear();
+            if(all.isEmpty()){
+                newsStatus.setText("Latest articles unavailable · Check network and tap Refresh");
+                line(newsRows,"No live articles are available. No simulated headlines are shown.",12,muted);newsNote="News unavailable";
+            } else {
+                all.sort((a,b)->Long.compare(b.published,a.published));newsStatus.setText("Last 24 hours  ·  Headlines and publisher images when supplied");
+                for(int i=0;i<Math.min(4,all.size());i++){
+                    Story s=all.get(i);topHeadlines.add(s.title);
+                    LinearLayout tile=vertical();tile.setPadding(dp(6),dp(4),dp(6),dp(3));tile.setBackground(shape(0xff1C2B3A));
+                    LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1);lp.rightMargin=dp(7);newsRows.addView(tile,lp);
+                    ImageView thumb=new ImageView(this);thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);thumb.setBackground(shape(0xff293B52));thumb.setContentDescription("Publisher image, if available");
+                    tile.addView(thumb,new LinearLayout.LayoutParams(-1,dp(67)));
+                    if(s.image!=null&&s.image.startsWith("https://"))loadThumbnail(s.image,thumb);
+                    TextView headline=text(s.title,12,white,true);headline.setMaxLines(2);headline.setEllipsize(TextUtils.TruncateAt.END);tile.addView(headline,new LinearLayout.LayoutParams(-1,dp(39)));
+                    tile.addView(text(s.category+"  ·  "+new SimpleDateFormat("HH:mm",Locale.ENGLISH).format(new Date(s.published)),9,mint,false));
+                    tile.setFocusable(true);tile.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(s.link)));}catch(Exception ignored){}});
+                    tile.setOnFocusChangeListener((v,b)->tile.setBackground(shape(b?0xff725A0B:0xff1C2B3A)));
+                }
+                newsNote=all.size()+" recent headlines";
+            }
+            updateSummary();
+        });
     }
     private void loadThumbnail(String imageUrl, ImageView image){new Thread(()->{try{
         HttpURLConnection c=(HttpURLConnection)new URL(imageUrl).openConnection();c.setConnectTimeout(4500);c.setReadTimeout(4500);c.setRequestProperty("User-Agent","JL02TV/2.4");c.connect();String mime=c.getContentType();if(mime==null||!mime.startsWith("image/"))return;
@@ -159,12 +189,12 @@ public class MainActivity extends Activity {
         for(ResolveInfo ri:found){if(ri.activityInfo==null)continue;String pkg=ri.activityInfo.packageName;if(pkg.equals(getPackageName())||!seen.add(pkg))continue;TVApp a=new TVApp();a.pkg=pkg;a.title=ri.loadLabel(pm).toString();a.icon=ri.loadIcon(pm);a.intent=pm.getLeanbackLaunchIntentForPackage(pkg);if(a.intent==null)a.intent=pm.getLaunchIntentForPackage(pkg);if(a.intent!=null)installedApps.add(a);}
         Collections.sort(installedApps,(a,b)->a.title.compareToIgnoreCase(b.title));Set<String> f=favorites();List<TVApp> pinned=new ArrayList<>();for(TVApp a:installedApps)if(f.contains(a.pkg))pinned.add(a);
         if(pinned.isEmpty()){String[] defaults={"youtube","netflix","primevideo","disney","spotify","vlc","kodi"};for(String search:defaults){for(TVApp a:installedApps)if(a.pkg.toLowerCase(Locale.US).contains(search)&&!pinned.contains(a)){pinned.add(a);break;}if(pinned.size()>=6)break;}}
-        favoriteRow.removeAllViews();appRow.removeAllViews();for(int i=0;i<Math.min(7,pinned.size());i++){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(116),1);lp.rightMargin=dp(9);favoriteRow.addView(appTile(pinned.get(i),true),lp);}
+        favoriteRow.removeAllViews();appRow.removeAllViews();for(int i=0;i<Math.min(7,pinned.size());i++){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(99),1);lp.rightMargin=dp(9);favoriteRow.addView(appTile(pinned.get(i),true),lp);}
         if(pinned.isEmpty())favoriteRow.addView(action("Choose an app below and hold OK to add it",()->startActivity(new Intent(this,AppsActivity.class))));
-        int shown=0;for(TVApp a:installedApps){if(shown>=9)break;if(f.contains(a.pkg))continue;LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(78),1);lp.rightMargin=dp(8);appRow.addView(appTile(a,false),lp);shown++;}appRow.addView(action("+ All Apps",()->startActivity(new Intent(this,AppsActivity.class))));
+        int shown=0;for(TVApp a:installedApps){if(shown>=7)break;if(f.contains(a.pkg))continue;LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(69),1);lp.rightMargin=dp(8);appRow.addView(appTile(a,false),lp);shown++;}appRow.addView(action("+ All Apps",()->startActivity(new Intent(this,AppsActivity.class))));
     }
     private FrameLayout appTile(TVApp a,boolean favorite){FrameLayout tile=new FrameLayout(this);tile.setBackground(shape(0xff172437));tile.setFocusable(true);tile.setClickable(true);
-        LinearLayout content=vertical();content.setGravity(Gravity.CENTER);content.setPadding(dp(4),dp(5),dp(4),dp(4));tile.addView(content,new FrameLayout.LayoutParams(-1,-1));ImageView icon=new ImageView(this);icon.setImageDrawable(a.icon);content.addView(icon,new LinearLayout.LayoutParams(dp(favorite?64:35),dp(favorite?64:35)));TextView title=text(a.title,favorite?12:10,white,true);title.setGravity(Gravity.CENTER);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);content.addView(title,new LinearLayout.LayoutParams(-1,dp(26)));
+        LinearLayout content=vertical();content.setGravity(Gravity.CENTER);content.setPadding(dp(4),dp(5),dp(4),dp(4));tile.addView(content,new FrameLayout.LayoutParams(-1,-1));ImageView icon=new ImageView(this);icon.setImageDrawable(a.icon);content.addView(icon,new LinearLayout.LayoutParams(dp(favorite?56:35),dp(favorite?56:35)));TextView title=text(a.title,favorite?12:10,white,true);title.setGravity(Gravity.CENTER);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);content.addView(title,new LinearLayout.LayoutParams(-1,dp(26)));
         if(favorite){TextView star=text("★",10,0xffFFD900,true);FrameLayout.LayoutParams sp=new FrameLayout.LayoutParams(dp(17),dp(19),Gravity.TOP|Gravity.RIGHT);sp.rightMargin=dp(6);sp.topMargin=dp(3);tile.addView(star,sp);}
         tile.setOnClickListener(v->{try{startActivity(a.intent);}catch(Exception ignored){}});tile.setOnLongClickListener(v->{flipFavorite(a.pkg);return true;});tile.setOnKeyListener((v,key,e)->{if(e.getAction()==KeyEvent.ACTION_UP&&(key==KeyEvent.KEYCODE_MENU||key==KeyEvent.KEYCODE_INFO)){flipFavorite(a.pkg);return true;}return false;});tile.setOnFocusChangeListener((v,b)->{tile.setBackground(shape(b?0xff8B6900:0xff172437));tile.setScaleX(b?1.04f:1f);tile.setScaleY(b?1.04f:1f);});return tile;
     }
@@ -177,9 +207,9 @@ public class MainActivity extends Activity {
         JSONArray htime=hours.getJSONArray("time"),htemp=hours.getJSONArray("temperature_2m"),hrain=hours.getJSONArray("precipitation_probability");
         JSONArray dtime=days.getJSONArray("time"),dhi=days.getJSONArray("temperature_2m_max"),dlo=days.getJSONArray("temperature_2m_min"),drain=days.getJSONArray("precipitation_probability_max");
         String today=new SimpleDateFormat("yyyy-MM-dd",Locale.US).format(new Date());List<String[]> hourList=new ArrayList<>(),dayList=new ArrayList<>();int max=0;
-        for(int i=0;i<htime.length();i++){String stamp=htime.getString(i);if(stamp.startsWith(today)){int rain=hrain.optInt(i,0);max=Math.max(max,rain);hourList.add(new String[]{stamp.substring(11),String.valueOf((int)Math.round(htemp.getDouble(i)))+"°",rain+"%"});}}
+        for(int i=0;i<htime.length();i++){String stamp=htime.getString(i);if(stamp.startsWith(today) && hourList.size()<8){int rain=hrain.optInt(i,0);max=Math.max(max,rain);hourList.add(new String[]{stamp.substring(11),String.valueOf((int)Math.round(htemp.getDouble(i)))+"°",rain+"%"});}}
         for(int i=1;i<Math.min(4,dtime.length());i++)dayList.add(new String[]{dtime.getString(i),Math.round(dhi.getDouble(i))+"° / "+Math.round(dlo.getDouble(i))+"°",drain.optInt(i)+"% rain"});
-        final int rain=max;ui.post(()->{highRain=rain;weatherNow.setText(temperature+"°C  ·  "+humid+"% humidity");weatherStatus.setText("Today · hourly precipitation outlook");hourlyRows.removeAllViews();for(String[] h:hourList){LinearLayout col=vertical();col.setPadding(dp(11),dp(8),dp(11),dp(8));col.addView(text(h[0],11,muted,true));col.addView(text(h[1],18,white,true));col.addView(text("☂ "+h[2],11,mint,false));hourlyRows.addView(col);}threeDays.removeAllViews();for(String[] d:dayList){line(threeDays,d[0]+"   "+d[1]+"   ☂ "+d[2],12,white);}todayForecast="Currently "+temperature+" degrees Celsius with "+humid+" percent humidity. Today peak hourly rain chance is "+rain+" percent.";StringBuilder next=new StringBuilder();for(String[] d:dayList)next.append(d[0]).append(": ").append(d[1].replace("°", " degrees ")).append(", ").append(d[2]).append(". ");nextForecast=next.toString();weatherNote=rain>=60?"Possible heavy rain today (up to "+rain+"% hourly probability)":"Today's maximum hourly rain chance: "+rain+"%";updateSummary();});
+        final int rain=max;ui.post(()->{highRain=rain;weatherNow.setText(temperature+"°C  ·  "+humid+"% humidity");weatherStatus.setText("Today · hourly precipitation outlook");hourlyRows.removeAllViews();for(String[] h:hourList){LinearLayout col=vertical();col.setPadding(dp(11),dp(8),dp(11),dp(8));col.addView(text(h[0],11,muted,true));col.addView(text(h[1],18,white,true));col.addView(text("☂ "+h[2],11,mint,false));hourlyRows.addView(col);}threeDays.removeAllViews();for(String[] d:dayList){line(threeDays,d[0].substring(5)+"  "+d[1]+"  ☂ "+d[2],10,white);}todayForecast="Currently "+temperature+" degrees Celsius with "+humid+" percent humidity. Today peak hourly rain chance is "+rain+" percent.";StringBuilder next=new StringBuilder();for(String[] d:dayList)next.append(d[0]).append(": ").append(d[1].replace("°", " degrees ")).append(", ").append(d[2]).append(". ");nextForecast=next.toString();weatherNote=rain>=60?"Possible heavy rain today (up to "+rain+"% hourly probability)":"Today's maximum hourly rain chance: "+rain+"%";updateSummary();});
         }catch(Exception e){ui.post(()->{weatherNow.setText("Forecast unavailable");weatherStatus.setText("Connect to internet, then select Refresh");weatherNote="Weather not updated";todayForecast="Forecast unavailable";nextForecast="Three-day forecast unavailable";updateSummary();});}}
     private void showCalendarOptions(){
         String[] opts={"Connect Google / Outlook (QR)","Set secure sync server URL", "Test calendar server connection", "Refresh schedule", "Disconnect an account", "Speak non-private meeting titles: "+(speakMeetingTitles?"ON":"OFF"),"Unlink this TV"};
