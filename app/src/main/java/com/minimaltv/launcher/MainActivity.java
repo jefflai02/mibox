@@ -94,7 +94,7 @@ public class MainActivity extends Activity {
         favoritePrefs=getSharedPreferences("home",MODE_PRIVATE);microsoft=new MicrosoftCalendar(this);build();setupSpeech();ui.post(tick);refreshAll();}
     @Override public void onResume(){super.onResume();if(favoritePrefs!=null)renderApps();loadCalendar();}
     @Override public void onPause(){stopSpeaking();super.onPause();}
-    @Override public void onDestroy(){ui.removeCallbacksAndMessages(null);if(speech!=null){speech.stop();speech.shutdown();speech=null;} releaseNatural(); super.onDestroy();}
+    @Override public void onDestroy(){ui.removeCallbacksAndMessages(null);if(speech!=null){speech.stop();speech.shutdown();speech=null;} releaseNatural(); if(activeTransfer!=null)activeTransfer.close(); super.onDestroy();}
     private void build(){
         ScrollView sc=new ScrollView(this);sc.setBackgroundColor(bg);sc.setFillViewport(true);sc.setVerticalScrollBarEnabled(false);
         LinearLayout root=vertical();root.setPadding(dp(26),dp(14),dp(26),dp(16));sc.addView(root);setContentView(sc);
@@ -107,12 +107,7 @@ public class MainActivity extends Activity {
         LinearLayout favSection=card();root.addView(favSection,new LinearLayout.LayoutParams(-1,dp(175)));
         header(favSection,"FAVORITE APPS","");favoriteRow=horizontal();favSection.addView(favoriteRow,new LinearLayout.LayoutParams(-1,dp(118)));
         gap(root,9);
-        LinearLayout news=card();root.addView(news,new LinearLayout.LayoutParams(-1,dp(228)));
-        LinearLayout nh=horizontal();nh.setGravity(Gravity.CENTER_VERTICAL);news.addView(nh);nh.addView(text("▣  LATEST NEWS",19,white,true),new LinearLayout.LayoutParams(0,dp(27),1));nh.addView(action("View more  ›",()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://news.google.com/home?hl=en-MY&gl=MY&ceid=MY:en")));}catch(Exception ignored){}}));
-        newsStatus=text("Updating latest headlines…",10,muted,false);news.addView(newsStatus,new LinearLayout.LayoutParams(-1,dp(21)));
-        newsRows=horizontal();news.addView(newsRows,new LinearLayout.LayoutParams(-1,dp(146)));
-        gap(root,9);
-        LinearLayout duo=horizontal();duo.setGravity(Gravity.TOP);root.addView(duo,new LinearLayout.LayoutParams(-1,dp(355)));
+        LinearLayout duo=horizontal();duo.setGravity(Gravity.TOP);root.addView(duo,new LinearLayout.LayoutParams(-1,dp(425)));
         LinearLayout weather=card();duo.addView(weather,new LinearLayout.LayoutParams(0,-1,58));
         header(weather,"☀  WEATHER · KUALA LUMPUR","Hourly outlook and next three days");
         weatherNow=text("Loading weather…",28,white,true);weather.addView(weatherNow);
@@ -133,6 +128,11 @@ public class MainActivity extends Activity {
         LinearLayout agenda=vertical();calInner.addView(agenda,new LinearLayout.LayoutParams(0,-1,55));
         agenda.addView(text("TODAY'S SCHEDULE",13,mint,true));calendarStatus=text("Checking calendars…",10,muted,false);agenda.addView(calendarStatus);
         ScrollView listScroll=new ScrollView(this);listScroll.setVerticalScrollBarEnabled(false);agenda.addView(listScroll,new LinearLayout.LayoutParams(-1,0,1));scheduleRows=vertical();listScroll.addView(scheduleRows);
+        gap(root,9);
+        LinearLayout news=card();root.addView(news,new LinearLayout.LayoutParams(-1,dp(205)));
+        LinearLayout nh=horizontal();nh.setGravity(Gravity.CENTER_VERTICAL);news.addView(nh);nh.addView(text("▣  LATEST NEWS",19,white,true),new LinearLayout.LayoutParams(0,dp(27),1));nh.addView(action("View more  ›",()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://news.google.com/home?hl=en-MY&gl=MY&ceid=MY:en")));}catch(Exception ignored){}}));
+        newsStatus=text("Updating latest headlines…",10,muted,false);news.addView(newsStatus,new LinearLayout.LayoutParams(-1,dp(21)));
+        newsRows=horizontal();news.addView(newsRows,new LinearLayout.LayoutParams(-1,dp(126)));
         gap(root,9);
         LinearLayout bottom=card();root.addView(bottom,new LinearLayout.LayoutParams(-1,dp(103)));
         LinearLayout strip=horizontal();strip.setGravity(Gravity.CENTER_VERTICAL);bottom.addView(strip,new LinearLayout.LayoutParams(-1,-1));
@@ -212,15 +212,24 @@ public class MainActivity extends Activity {
         if(pinned.isEmpty())favoriteRow.addView(action("Choose an app below and hold OK to add it",()->startActivity(new Intent(this,AppsActivity.class))));
         int shown=0;for(TVApp a:installedApps){if(shown>=7)break;if(f.contains(a.pkg))continue;LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(69),1);lp.rightMargin=dp(8);appRow.addView(appTile(a,false),lp);shown++;}appRow.addView(action("+ All Apps",()->startActivity(new Intent(this,AppsActivity.class))));
     }
-    private FrameLayout appTile(TVApp a,boolean favorite){FrameLayout tile=new FrameLayout(this);tile.setBackground(shape(0xff121212));tile.setFocusable(true);tile.setClickable(true);
-        LinearLayout content=vertical();content.setGravity(Gravity.CENTER);content.setPadding(dp(7),dp(2),dp(7),dp(2));tile.addView(content,new FrameLayout.LayoutParams(-1,-1));ImageView icon=new ImageView(this);
-        // Prefer landscape artwork supplied by Android TV applications; fall back to their official icon.
-        boolean landscape=favorite && a.banner!=null;
-        icon.setImageDrawable(landscape?a.banner:a.icon);
-        icon.setScaleType(landscape?ImageView.ScaleType.CENTER_CROP:ImageView.ScaleType.FIT_CENTER);
-        content.addView(icon,new LinearLayout.LayoutParams(landscape?-1:dp(favorite?110:45),dp(favorite?85:42)));TextView title=text(a.title,favorite?12:10,white,true);title.setGravity(Gravity.CENTER);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);content.addView(title,new LinearLayout.LayoutParams(-1,dp(26)));
-
-        tile.setOnClickListener(v->{try{startActivity(a.intent);}catch(Exception ignored){}});tile.setOnLongClickListener(v->{flipFavorite(a.pkg);return true;});tile.setOnKeyListener((v,key,e)->{if(e.getAction()==KeyEvent.ACTION_UP&&(key==KeyEvent.KEYCODE_MENU||key==KeyEvent.KEYCODE_INFO)){flipFavorite(a.pkg);return true;}return false;});tile.setOnFocusChangeListener((v,b)->{tile.setBackground(shape(b?0xff8B6900:0xff121212));tile.setScaleX(b?1.04f:1f);tile.setScaleY(b?1.04f:1f);});return tile;
+    private FrameLayout appTile(TVApp a,boolean favorite){
+        FrameLayout tile=new FrameLayout(this);tile.setBackground(shape(0xff10151d));tile.setFocusable(true);tile.setClickable(true);
+        ImageView artwork=new ImageView(this);
+        artwork.setImageDrawable(favorite && a.banner!=null?a.banner:a.icon);
+        artwork.setScaleType(favorite?ImageView.ScaleType.FIT_CENTER:ImageView.ScaleType.FIT_CENTER);
+        FrameLayout.LayoutParams art=new FrameLayout.LayoutParams(-1,-1);
+        art.setMargins(dp(favorite?3:7),dp(favorite?2:4),dp(favorite?3:7),dp(favorite?17:16));
+        tile.addView(artwork,art);
+        TextView title=text(a.title,favorite?12:10,white,true);title.setGravity(Gravity.CENTER);
+        title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);
+        title.setBackgroundColor(0xAD070B12);
+        FrameLayout.LayoutParams label=new FrameLayout.LayoutParams(-1,dp(favorite?23:18),Gravity.BOTTOM);
+        tile.addView(title,label);
+        tile.setOnClickListener(v->{try{startActivity(a.intent);}catch(Exception ignored){}});
+        tile.setOnLongClickListener(v->{flipFavorite(a.pkg);return true;});
+        tile.setOnKeyListener((v,key,e)->{if(e.getAction()==KeyEvent.ACTION_UP&&(key==KeyEvent.KEYCODE_MENU||key==KeyEvent.KEYCODE_INFO)){flipFavorite(a.pkg);return true;}return false;});
+        tile.setOnFocusChangeListener((v,b)->{tile.setBackground(shape(b?0xff8B6900:0xff10151d));tile.setScaleX(b?1.035f:1f);tile.setScaleY(b?1.035f:1f);});
+        return tile;
     }
 
     private void fetchWeather(){try{
@@ -240,11 +249,46 @@ public class MainActivity extends Activity {
         microsoft.signIn(()->loadCalendar());
     }
     private void showCalendarOptions(){
-        String[] opts={"Connect Microsoft 365 on my phone","Refresh work schedule","Disconnect Microsoft 365","Use calendar on this TV","Add Google Calendar iCal link (read-only)","Remove Google Calendar link","Speak meeting titles: "+(speakMeetingTitles?"ON":"OFF")};
+        String[] opts={"Connect Microsoft 365 on my phone","Refresh work schedule","Disconnect Microsoft 365","Use calendar on this TV","Add Google Calendar iCal link (read-only)","Send Google iCal link from phone (QR)","Remove Google Calendar link","Speak meeting titles: "+(speakMeetingTitles?"ON":"OFF")};
         new AlertDialog.Builder(this).setTitle("JL02 TV · Calendar").setItems(opts,(d,i)->{
-            switch(i){case 0:connectMicrosoft();break;case 1:loadCalendar();break;case 2:microsoft.disconnect();meetings.clear();loadCalendar();break;case 3:requestCalendar();break;case 4:showGoogleLinkInput();break;case 5:favoritePrefs.edit().remove("google_ical").apply();loadCalendar();break;case 6:speakMeetingTitles=!speakMeetingTitles;break;}
+            switch(i){case 0:connectMicrosoft();break;case 1:loadCalendar();break;case 2:microsoft.disconnect();meetings.clear();loadCalendar();break;case 3:requestCalendar();break;case 4:showGoogleLinkInput();break;case 5:showPhoneTransfer();break;case 6:favoritePrefs.edit().remove("google_ical").apply();loadCalendar();break;case 7:speakMeetingTitles=!speakMeetingTitles;break;}
         }).setNegativeButton("Close",null).show();
     }
+
+    private LocalIcalTransfer activeTransfer;
+    private void showPhoneTransfer(){
+        new AlertDialog.Builder(this).setTitle("Send your Google Calendar link from your phone")
+            .setMessage("Use only a trusted private home Wi-Fi network. Your phone and TV must be on the same Wi-Fi. This temporary local connection is HTTP, not end-to-end encrypted: other devices on the network could potentially intercept the secret calendar link. For stronger privacy, use manual entry instead. Continue?")
+            .setPositiveButton("Use trusted home Wi-Fi",(d,w)->startPhoneTransfer())
+            .setNegativeButton("Cancel",null).show();
+    }
+    private void startPhoneTransfer(){
+        try{
+            if(activeTransfer!=null)activeTransfer.close();
+            activeTransfer=new LocalIcalTransfer(this,link->{
+                new AlertDialog.Builder(this).setTitle("Accept personal calendar link?")
+                    .setMessage("A phone submitted a Google Calendar iCal link. Save it on this TV? Confirm only if you sent it. The link grants read access to your calendar.")
+                    .setPositiveButton("Save & sync",(dialog,which)->{
+                        favoritePrefs.edit().putString("google_ical",link).apply();
+                        if(activeTransfer!=null){activeTransfer.close();activeTransfer=null;}
+                        loadCalendar();
+                    }).setNegativeButton("Reject",(dialog,which)->{
+                        if(activeTransfer!=null){activeTransfer.close();activeTransfer=null;}
+                    }).show();
+            });
+            String address=activeTransfer.start();
+            BitMatrix bits=new MultiFormatWriter().encode(address,BarcodeFormat.QR_CODE,310,310);
+            Bitmap bmp=Bitmap.createBitmap(310,310,Bitmap.Config.ARGB_8888);
+            for(int y=0;y<310;y++)for(int x=0;x<310;x++)bmp.setPixel(x,y,bits.get(x,y)?Color.BLACK:Color.WHITE);
+            ImageView img=new ImageView(this);img.setImageBitmap(bmp);
+            img.setPadding(dp(12),dp(12),dp(12),dp(12));
+            new AlertDialog.Builder(this).setTitle("Scan on your phone · expires in 3 minutes")
+                .setMessage("Your phone must be on the same trusted Wi-Fi. Paste the Secret iCal link into the phone page. Confirm the transfer on TV. Local HTTP is not encrypted.\n\n"+address)
+                .setView(img).setNegativeButton("Stop",(d,w)->{if(activeTransfer!=null){activeTransfer.close();activeTransfer=null;}})
+                .setOnDismissListener(d->{ /* Keep session until expiry or transfer confirmation */ }).show();
+        }catch(Exception e){message("Could not start local pairing. Check your Wi-Fi connection: "+e.getMessage());}
+    }
+
     private void showGoogleLinkInput(){
         EditText input=new EditText(this);input.setSingleLine();input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);
         input.setHint("https://calendar.google.com/calendar/ical/…/basic.ics");
