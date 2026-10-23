@@ -105,24 +105,24 @@ public class MainActivity extends Activity {
         voiceButton=action("▶  Listen to briefing",this::toggleSpeech);top.addView(voiceButton);top.addView(action("↻  Refresh",this::refreshAll));top.addView(action("▦  Calendars",this::showCalendarOptions));top.addView(action("⚙",()->startActivity(new Intent(Settings.ACTION_SETTINGS))));
         gap(root,8);
         LinearLayout favSection=card();root.addView(favSection,new LinearLayout.LayoutParams(-1,dp(175)));
-        header(favSection,"★  FAVORITE APPS","OK to launch  •  Long OK to remove favorite");favoriteRow=horizontal();favSection.addView(favoriteRow,new LinearLayout.LayoutParams(-1,dp(118)));
+        header(favSection,"FAVORITE APPS","");favoriteRow=horizontal();favSection.addView(favoriteRow,new LinearLayout.LayoutParams(-1,dp(118)));
         gap(root,9);
         LinearLayout news=card();root.addView(news,new LinearLayout.LayoutParams(-1,dp(228)));
         LinearLayout nh=horizontal();nh.setGravity(Gravity.CENTER_VERTICAL);news.addView(nh);nh.addView(text("▣  LATEST NEWS",19,white,true),new LinearLayout.LayoutParams(0,dp(27),1));nh.addView(action("View more  ›",()->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse("https://news.google.com/home?hl=en-MY&gl=MY&ceid=MY:en")));}catch(Exception ignored){}}));
         newsStatus=text("Updating latest headlines…",10,muted,false);news.addView(newsStatus,new LinearLayout.LayoutParams(-1,dp(21)));
         newsRows=horizontal();news.addView(newsRows,new LinearLayout.LayoutParams(-1,dp(146)));
         gap(root,9);
-        LinearLayout duo=horizontal();duo.setGravity(Gravity.TOP);root.addView(duo,new LinearLayout.LayoutParams(-1,dp(248)));
-        LinearLayout weather=card();duo.addView(weather,new LinearLayout.LayoutParams(0,-1,49));
+        LinearLayout duo=horizontal();duo.setGravity(Gravity.TOP);root.addView(duo,new LinearLayout.LayoutParams(-1,dp(355)));
+        LinearLayout weather=card();duo.addView(weather,new LinearLayout.LayoutParams(0,-1,58));
         header(weather,"☀  WEATHER · KUALA LUMPUR","Hourly outlook and next three days");
         weatherNow=text("Loading weather…",28,white,true);weather.addView(weatherNow);
         TextView sky=text("☁  ☀  ☂",23,mint,true);sky.setGravity(Gravity.CENTER);weather.addView(sky,new LinearLayout.LayoutParams(-1,dp(27)));
         android.animation.ObjectAnimator pulse=android.animation.ObjectAnimator.ofFloat(sky,"alpha",.68f,1f);pulse.setDuration(2500);pulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);pulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);pulse.start();
         weatherStatus=text("Updating forecast",10,muted,false);weather.addView(weatherStatus);
         hourlyTitle=text("NEXT HOURS",10,mint,true);weather.addView(hourlyTitle);
-        HorizontalScrollView hsc=new HorizontalScrollView(this);hsc.setHorizontalScrollBarEnabled(false);weather.addView(hsc,new LinearLayout.LayoutParams(-1,dp(62)));hourlyRows=horizontal();hsc.addView(hourlyRows);
-        threeDays=vertical();weather.addView(threeDays);
-        LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,-1,51);rp.leftMargin=dp(10);LinearLayout calendar=card();duo.addView(calendar,rp);
+        HorizontalScrollView hsc=new HorizontalScrollView(this);hsc.setHorizontalScrollBarEnabled(false);weather.addView(hsc,new LinearLayout.LayoutParams(-1,dp(91)));hourlyRows=horizontal();hsc.addView(hourlyRows);
+        threeDays=horizontal();weather.addView(threeDays,new LinearLayout.LayoutParams(-1,dp(100)));
+        LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,-1,42);rp.leftMargin=dp(10);LinearLayout calendar=card();duo.addView(calendar,rp);
         header(calendar,"▦  CALENDAR & SCHEDULE","Microsoft 365 · direct phone sign-in");
         LinearLayout calInner=horizontal();calendar.addView(calInner,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout pair=vertical();pair.setPadding(dp(8),dp(5),dp(12),dp(4));calInner.addView(pair,new LinearLayout.LayoutParams(0,-1,45));
@@ -188,8 +188,8 @@ public class MainActivity extends Activity {
         fallback.setCornerRadius(dp(9));return fallback;
     }
     private void loadThumbnail(String imageUrl, ImageView image){new Thread(()->{try{
-        HttpURLConnection c=(HttpURLConnection)new URL(imageUrl).openConnection();c.setConnectTimeout(4500);c.setReadTimeout(4500);c.setRequestProperty("User-Agent","JL02TV/2.4");c.connect();String mime=c.getContentType();if(mime==null||!mime.startsWith("image/"))return;
-        BitmapFactory.Options opts=new BitmapFactory.Options();opts.inSampleSize=2;Bitmap b;try(InputStream in=c.getInputStream()){b=BitmapFactory.decodeStream(in,null,opts);}if(b!=null)ui.post(()->image.setImageBitmap(b));
+        HttpURLConnection c=(HttpURLConnection)new URL(imageUrl).openConnection();c.setConnectTimeout(4500);c.setReadTimeout(7500);c.setRequestProperty("User-Agent","Mozilla/5.0 (JL02TV; Android TV)");c.connect();String mime=c.getContentType();if(mime==null||!mime.startsWith("image/"))return;
+        BitmapFactory.Options opts=new BitmapFactory.Options();opts.inSampleSize=1;Bitmap b;try(InputStream in=c.getInputStream()){b=BitmapFactory.decodeStream(in,null,opts);}if(b!=null)ui.post(()->image.setImageBitmap(b));
     }catch(Exception ignored){}}).start();}
 
     private void loadOpenGraphImage(String page,ImageView target){new Thread(()->{try{
@@ -217,9 +217,9 @@ public class MainActivity extends Activity {
         // Prefer landscape artwork supplied by Android TV applications; fall back to their official icon.
         boolean landscape=favorite && a.banner!=null;
         icon.setImageDrawable(landscape?a.banner:a.icon);
-        icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        content.addView(icon,new LinearLayout.LayoutParams(landscape?-1:dp(favorite?90:45),dp(favorite?76:42)));TextView title=text(a.title,favorite?12:10,white,true);title.setGravity(Gravity.CENTER);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);content.addView(title,new LinearLayout.LayoutParams(-1,dp(26)));
-        if(favorite){TextView star=text("★",10,0xffFFD900,true);FrameLayout.LayoutParams sp=new FrameLayout.LayoutParams(dp(17),dp(19),Gravity.TOP|Gravity.RIGHT);sp.rightMargin=dp(6);sp.topMargin=dp(3);tile.addView(star,sp);}
+        icon.setScaleType(landscape?ImageView.ScaleType.CENTER_CROP:ImageView.ScaleType.FIT_CENTER);
+        content.addView(icon,new LinearLayout.LayoutParams(landscape?-1:dp(favorite?110:45),dp(favorite?85:42)));TextView title=text(a.title,favorite?12:10,white,true);title.setGravity(Gravity.CENTER);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);content.addView(title,new LinearLayout.LayoutParams(-1,dp(26)));
+
         tile.setOnClickListener(v->{try{startActivity(a.intent);}catch(Exception ignored){}});tile.setOnLongClickListener(v->{flipFavorite(a.pkg);return true;});tile.setOnKeyListener((v,key,e)->{if(e.getAction()==KeyEvent.ACTION_UP&&(key==KeyEvent.KEYCODE_MENU||key==KeyEvent.KEYCODE_INFO)){flipFavorite(a.pkg);return true;}return false;});tile.setOnFocusChangeListener((v,b)->{tile.setBackground(shape(b?0xff8B6900:0xff121212));tile.setScaleX(b?1.04f:1f);tile.setScaleY(b?1.04f:1f);});return tile;
     }
 
@@ -231,19 +231,34 @@ public class MainActivity extends Activity {
         JSONArray htime=hours.getJSONArray("time"),htemp=hours.getJSONArray("temperature_2m"),hrain=hours.getJSONArray("precipitation_probability");
         JSONArray dtime=days.getJSONArray("time"),dhi=days.getJSONArray("temperature_2m_max"),dlo=days.getJSONArray("temperature_2m_min"),drain=days.getJSONArray("precipitation_probability_max");
         String today=new SimpleDateFormat("yyyy-MM-dd",Locale.US).format(new Date());List<String[]> hourList=new ArrayList<>(),dayList=new ArrayList<>();int max=0;
-        for(int i=0;i<htime.length();i++){String stamp=htime.getString(i);if(stamp.startsWith(today) && hourList.size()<8){int rain=hrain.optInt(i,0);max=Math.max(max,rain);hourList.add(new String[]{stamp.substring(11),String.valueOf((int)Math.round(htemp.getDouble(i)))+"°",rain+"%"});}}
+        for(int i=0;i<htime.length();i++){String stamp=htime.getString(i);if(stamp.compareTo(new SimpleDateFormat("yyyy-MM-dd'T'HH",Locale.US).format(new Date()))>=0 && hourList.size()<8){int rain=hrain.optInt(i,0);max=Math.max(max,rain);hourList.add(new String[]{stamp.substring(11),String.valueOf((int)Math.round(htemp.getDouble(i)))+"°",rain+"%"});}}
         for(int i=1;i<Math.min(4,dtime.length());i++)dayList.add(new String[]{dtime.getString(i),Math.round(dhi.getDouble(i))+"° / "+Math.round(dlo.getDouble(i))+"°",drain.optInt(i)+"% rain"});
-        final int rain=max;ui.post(()->{highRain=rain;weatherNow.setText(temperature+"°C  ·  "+humid+"% humidity");weatherStatus.setText("Today · hourly precipitation outlook");hourlyRows.removeAllViews();for(String[] h:hourList){LinearLayout col=vertical();col.setPadding(dp(11),dp(8),dp(11),dp(8));col.addView(text(h[0],11,muted,true));col.addView(text(h[1],18,white,true));col.addView(text("☂ "+h[2],11,mint,false));hourlyRows.addView(col);}threeDays.removeAllViews();for(String[] d:dayList){line(threeDays,d[0].substring(5)+"  "+d[1]+"  ☂ "+d[2],10,white);}todayForecast="Currently "+temperature+" degrees Celsius with "+humid+" percent humidity. Today peak hourly rain chance is "+rain+" percent.";StringBuilder next=new StringBuilder();for(String[] d:dayList)next.append(d[0]).append(": ").append(d[1].replace("°", " degrees ")).append(", ").append(d[2]).append(". ");nextForecast=next.toString();weatherNote=rain>=60?"Possible heavy rain today (up to "+rain+"% hourly probability)":"Today's maximum hourly rain chance: "+rain+"%";updateSummary();});
+        final int rain=max;ui.post(()->{highRain=rain;weatherNow.setText(temperature+"°C  ·  "+humid+"% humidity");weatherStatus.setText("Today · hourly precipitation outlook");hourlyRows.removeAllViews();for(String[] h:hourList){LinearLayout col=vertical();col.setPadding(dp(11),dp(8),dp(11),dp(8));col.addView(text(h[0],11,muted,true));col.addView(text(h[1],18,white,true));col.addView(text("☂ "+h[2],11,mint,false));hourlyRows.addView(col);}threeDays.removeAllViews();for(String[] d:dayList){LinearLayout day=vertical();day.setBackground(shape(0xff26364a));day.setPadding(dp(12),dp(10),dp(8),dp(8));LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(92),1);lp.rightMargin=dp(8);threeDays.addView(day,lp);day.addView(text(d[0].substring(5),13,mint,true));day.addView(text(d[1],16,white,true));day.addView(text("☂ "+d[2],12,muted,false));}todayForecast="Currently "+temperature+" degrees Celsius with "+humid+" percent humidity. Today peak hourly rain chance is "+rain+" percent.";StringBuilder next=new StringBuilder();for(String[] d:dayList)next.append(d[0]).append(": ").append(d[1].replace("°", " degrees ")).append(", ").append(d[2]).append(". ");nextForecast=next.toString();weatherNote=rain>=60?"Possible heavy rain today (up to "+rain+"% hourly probability)":"Today's maximum hourly rain chance: "+rain+"%";updateSummary();});
         }catch(Exception e){ui.post(()->{weatherNow.setText("Forecast unavailable");weatherStatus.setText("Connect to internet, then select Refresh");weatherNote="Weather not updated";todayForecast="Forecast unavailable";nextForecast="Three-day forecast unavailable";updateSummary();});}}
     private void connectMicrosoft(){
         if(!microsoft.isConfigured()){message("This APK needs a Microsoft application ID set once at GitHub build time. See MICROSOFT-SETUP.md. No company password or server is needed on the TV.");return;}
         microsoft.signIn(()->loadCalendar());
     }
     private void showCalendarOptions(){
-        String[] opts={"Connect Microsoft 365 on my phone","Refresh work schedule","Disconnect Microsoft 365","Use calendar on this TV","Speak meeting titles: "+(speakMeetingTitles?"ON":"OFF")};
+        String[] opts={"Connect Microsoft 365 on my phone","Refresh work schedule","Disconnect Microsoft 365","Use calendar on this TV","Add Google Calendar iCal link (read-only)","Remove Google Calendar link","Speak meeting titles: "+(speakMeetingTitles?"ON":"OFF")};
         new AlertDialog.Builder(this).setTitle("JL02 TV · Calendar").setItems(opts,(d,i)->{
-            switch(i){case 0:connectMicrosoft();break;case 1:loadCalendar();break;case 2:microsoft.disconnect();meetings.clear();loadCalendar();break;case 3:requestCalendar();break;case 4:speakMeetingTitles=!speakMeetingTitles;break;}
+            switch(i){case 0:connectMicrosoft();break;case 1:loadCalendar();break;case 2:microsoft.disconnect();meetings.clear();loadCalendar();break;case 3:requestCalendar();break;case 4:showGoogleLinkInput();break;case 5:favoritePrefs.edit().remove("google_ical").apply();loadCalendar();break;case 6:speakMeetingTitles=!speakMeetingTitles;break;}
         }).setNegativeButton("Close",null).show();
+    }
+    private void showGoogleLinkInput(){
+        EditText input=new EditText(this);input.setSingleLine();input.setInputType(android.text.InputType.TYPE_CLASS_TEXT|android.text.InputType.TYPE_TEXT_VARIATION_URI);
+        input.setHint("https://calendar.google.com/calendar/ical/…/basic.ics");
+        new AlertDialog.Builder(this).setTitle("Google Calendar · read-only iCal")
+            .setMessage("On a computer, open Google Calendar → Settings → your personal calendar → Integrate calendar → Secret address in iCal format. Copy the HTTPS link. Treat it like a password: anyone holding it may read that calendar. Use only your personal calendar, never a restricted company calendar. The link is stored locally on this TV.")
+            .setView(input).setPositiveButton("Save & sync",(dialog,which)->{String url=input.getText().toString().trim();if(!url.startsWith("https://")||!url.endsWith(".ics")){message("Paste the full HTTPS Secret address in iCal format ending in .ics.");return;} favoritePrefs.edit().putString("google_ical",url).apply();loadCalendar();})
+            .setNegativeButton("Cancel",null).show();
+    }
+    private void loadGoogleIcal(){String url=favoritePrefs.getString("google_ical","");if(url.isEmpty())return;
+        calendarStatus.setText("Updating personal Google Calendar…");
+        new Thread(()->{try{String ics=read(open(url));java.util.ArrayList<String> entries=new java.util.ArrayList<>();String today=new SimpleDateFormat("yyyyMMdd",Locale.US).format(new Date());String[] blocks=ics.replace("\r","").replace("\n ","").split("BEGIN:VEVENT");
+            for(int i=1;i<blocks.length&&entries.size()<12;i++){String block=blocks[i];String title="Busy",start="";for(String line:block.split("\n")){if(line.startsWith("SUMMARY:"))title=line.substring(8).replace("\\,",",");if(line.startsWith("DTSTART")&&line.contains(":"))start=line.substring(line.indexOf(':')+1).trim();}if(start.length()>=8 && start.startsWith(today)){String hour=start.length()>=13?start.substring(9,11)+":"+start.substring(11,13):"All day";entries.add(hour+" · "+title);}}
+            ui.post(()->{meetings.clear();meetings.addAll(entries);scheduleRows.removeAllViews();calendarStatus.setText(entries.size()+" Google event(s) today");if(entries.isEmpty())line(scheduleRows,"No Google events found today",12,muted);for(String e:entries)line(scheduleRows,e,12,white);updateSummary();});
+        }catch(Exception ex){ui.post(()->{calendarStatus.setText("Google iCal could not be loaded");scheduleRows.removeAllViews();line(scheduleRows,"Check the iCal link or network",12,muted);});}}).start();
     }
     private void configureServer(){EditText input=new EditText(this);input.setSingleLine();input.setText(syncUrl);input.setHint("https://your-secure-service.example");
         new AlertDialog.Builder(this).setTitle("Secure calendar service HTTPS URL").setView(input).setPositiveButton("Save",(d,w)->{
@@ -311,6 +326,7 @@ public class MainActivity extends Activity {
     private void requestCalendar(){if(android.os.Build.VERSION.SDK_INT>=23 && checkSelfPermission(Manifest.permission.READ_CALENDAR)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.READ_CALENDAR},50);}else loadCalendar();}
     @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);if(r==50)loadCalendar();}
     private void loadCalendar(){
+        if(favoritePrefs!=null&&!favoritePrefs.getString("google_ical","").isEmpty() && (microsoft==null||!microsoft.isConnected())){loadGoogleIcal();return;}
         if(microsoft!=null && microsoft.isConnected()){
             calendarStatus.setText("Updating Microsoft 365 calendar…");
             microsoft.loadToday(result->{

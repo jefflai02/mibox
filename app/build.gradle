@@ -12,8 +12,8 @@ android {
         buildConfigField 'String', 'CALENDAR_SERVICE_URL', '"' + (System.getenv('JL02_CALENDAR_URL') ?: '').replace('\\','').replace('\"','') + '"'
         minSdk 23
         targetSdk 28
-        versionCode 12
-        versionName '2.9'
+        versionCode 13
+        versionName '3.0'
     }
 }
 
