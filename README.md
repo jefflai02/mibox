@@ -1,31 +1,32 @@
-# Minimal TV — Xiaomi / Android TV launcher
+# JL02 TV v2.3 — Voice Dashboard + Google and Outlook pairing
 
-A small, ad-free, Java-native launcher. No network access, advertisements, analytics, recommendations, account sign-in, Compose or third-party dependencies.
+See **DEPLOY-CALENDARS.md** for required HTTPS backend and provider OAuth setup. No real calendar account is connected by default.
 
-## Features
-- D-pad navigation and high-contrast remote focus states
-- Live date and 24-hour clock
-- Installed TV apps (plus compatible phone-style apps) and app launch
-- Up to six favorite tiles; long-press OK to toggle favorite (MENU/INFO key also works)
-- Wi-Fi and system settings shortcuts
-- Persistent favorite list; compact all-apps panel
-- Android TV launcher and HOME intents, API 23+
+# JL02 TV 2.2 — Personal Briefing Dashboard
 
-## One-click cloud build
-See `BUILD-APK-EASY.md` for GitHub Actions APK build instructions.
+For Xiaomi Mi Box S MDZ-22-AB (Android TV). Replaces first screen with welcome dashboard and keeps original app grid in **Apps**.
 
-## Build (Android Studio)
-1. Install a current Android Studio version with Android SDK 35 and JDK 17.
-2. Open this folder as a project, allow Gradle to sync (Android Gradle Plugin 8.6.1).
-3. Build > Build APK(s). APK output: `app/build/outputs/apk/debug/app-debug.apk`.
-4. Transfer to your TV using `adb install -r app-debug.apk` or install using a file manager.
-5. Open **Minimal TV** in the TV's apps list. Confirm remote focus, app launch, and Settings work before attempting to make it the default HOME app.
+## Included
 
-## HOME button / replacing the stock launcher
-Android TV and Google TV firmware vary. The HOME intent in the manifest makes this app *eligible* as a Home app, but firmware may ignore a different HOME preference. Never disable stock launcher until you have confirmed this launcher works and you have a recovery path. If available, pick Minimal TV in system's Home app/default apps menu. Some devices require a model-specific launcher manager or ADB procedure. DO NOT blindly disable Xiaomi/Google system packages.
+- **Voice briefing:** Remote-selectable **Listen to briefing / Stop briefing** button reads live weather, the next three days, available calendar events, up to five recent headlines, and important notes aloud using Android Text-to-Speech. Playback is on demand, and automatically stops when exiting the app. If TTS is missing, install/enable a compatible speech engine on the TV. Voice language is English; no microphone permission, recording or cloud speech API required.
 
-## Limitations
-- This is a **source project**, not a prebuilt or signed APK. Android SDK and Gradle build tooling are not present in the authoring environment.
-- Not benchmarked on a physical Xiaomi device; performance gains are expected mainly from the simpler launcher UI, not faster video playback or system-level changes.
-- Android package visibility differs by firmware; apps with neither TV nor standard launcher activities may not appear.
-- Some applications block third-party launching, and manufacturer remote shortcuts may continue to open stock apps.
+- Welcome, local clock, large remote-focus buttons.
+- **Last 24h headlines:** five Google News RSS searches (AI/technology, semiconductors, Malaysia business, global markets, trade). Only items with parsed publication time within 24 hours are displayed. Select a headline to open its link in an installed browser; older stories and failed feeds are not fabricated.
+- **Weather:** Open-Meteo online forecast, using fixed Kuala Lumpur coordinates (3.1390, 101.6869), 24 hourly readings for today in a horizontally scrollable strip, and three following days with rain probabilities.
+- **Schedule:** Reads local Android Calendar instances for today *with user permission*. Android TV devices may have no calendar provider or no synced calendars; this is stated in the interface. Google Calendar in ChatGPT is **not** automatically accessible to the APK.
+- **Things to note:** dynamically compiled from actual weather, schedule, and news data; never invented appointments.
+- Existing app launcher (previous version's favorites, apps & settings) via **Apps**.
+
+## Build and install
+
+Extract files at the GitHub repository root; overwrite the existing files including `.github/workflows/build-apk.yml`. Push/commit to `main` then open **Actions → Build JL02 TV APK**, open successful run **Summary → Artifacts**, download `JL02-TV-MDZ-22-AB-APK` and extract `app-debug.apk`. Install with TV file manager or `adb install -r app-debug.apk` (same package ID; debug signing key might differ across GitHub builds, in which case uninstall old test app first, losing its saved favorites).
+
+## Requirements / caveats
+
+Requires Wi-Fi or network access; public APIs may be unavailable in some networks. Calendar permission is optional. Calendar provider must exist and have synchronized events for schedule to show. News links may require an installed Android TV browser. The dashboard does not generate AI summaries or access personal cloud accounts. It shows its compiled day notes from available data. Kotlin, Google services, and third-party advertising SDKs are not included. It is a source package, not a pre-built APK, and hasn't been verified on the physical box.
+
+## Customization
+
+Edit the `topics` array in MainActivity.java for subjects. Edit Open-Meteo `latitude` and `longitude` for another city. Change welcome text in `build()`.
+
+**Upgrade compatibility:** Android application ID remains `com.minimaltv.launcher` intentionally so JL02 TV replaces the previous launcher rather than appearing as a separate app. New debug builds may be signed with a different key.

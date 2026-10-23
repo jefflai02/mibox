@@ -7,7 +7,9 @@ android {
         applicationId 'com.minimaltv.launcher'
         minSdk 23
         targetSdk 28
-        versionCode 1
-        versionName '1.0'
+        versionCode 5
+        versionName '2.3'
     }
 }
+
+ dependencies { implementation 'com.google.zxing:core:3.5.3' }
