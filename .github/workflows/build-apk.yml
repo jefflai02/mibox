@@ -1,4 +1,4 @@
-name: Build Minimal TV APK
+name: Build JL02 TV v2.3 APK
 
 on:
   workflow_dispatch:
@@ -53,7 +53,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: MinimalTV-MDZ-22-AB-APK
+          name: JL02-TV-v2.3-MDZ-22-AB-APK
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30
