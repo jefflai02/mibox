@@ -6,6 +6,19 @@ import android.widget.EditText;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.widget.ImageView;
+import android.widget.FrameLayout;
+import android.content.SharedPreferences;
+import android.content.pm.ResolveInfo;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.BitmapDrawable;
+import android.text.TextUtils;
+import android.view.KeyEvent;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.MultiFormatWriter;
 import com.google.zxing.common.BitMatrix;
@@ -48,16 +61,19 @@ import android.util.Xml;
 
 /** TV-first dashboard. Public network data; calendar stays on device. No trackers or credentials. */
 public class MainActivity extends Activity {
-    private final int bg=0xff0B1220, panel=0xff172437, muted=0xff9CB0C8, mint=0xff66E8C8, white=0xffF5F8FD;
+    private final int bg=0xff080A10, panel=0xff172437, muted=0xff9CB0C8, mint=0xffFFD900, white=0xffF5F8FD;
     private final Handler ui = new Handler();
     private TextView time, weatherNow, weatherStatus, hourlyTitle, newsStatus, summary, calendarStatus;
-    private LinearLayout newsRows, hourlyRows, threeDays, scheduleRows;
+    private LinearLayout newsRows, hourlyRows, threeDays, scheduleRows, favoriteRow, appRow;
     private TextToSpeech speech; private boolean speechReady=false, speaking=false; private TextView voiceButton;
     private final List<String> topHeadlines=new ArrayList<>();
     private String syncUrl=""; private String deviceToken=""; private boolean speakMeetingTitles=false;
     private final List<String> syncedAccounts=new ArrayList<>();
     private String todayForecast="Forecast loading", nextForecast="Three-day forecast loading";
     private volatile String newsNote="News loading", weatherNote="Forecast loading";
+    private final List<TVApp> installedApps=new ArrayList<>();
+    private SharedPreferences favoritePrefs;
+    private static class TVApp {String pkg,title; Drawable icon; Intent intent;}
     private int highRain=0; private final List<String> meetings=new ArrayList<>();
     private final Runnable tick=new Runnable(){@Override public void run(){ if(time!=null) time.setText(new SimpleDateFormat("EEE, d MMM  •  HH:mm",Locale.ENGLISH).format(new Date()));ui.postDelayed(this,30000); }};
     private int dp(int x){return (int)(x*getResources().getDisplayMetrics().density+.5f);}
@@ -72,26 +88,30 @@ public class MainActivity extends Activity {
     private void focus(View v){v.setFocusable(true);v.setOnFocusChangeListener((w,b)->{w.setBackground(shape(b?0xff23525E:panel));w.setScaleX(b?1.015f:1);w.setScaleY(b?1.015f:1);});}
     private TextView action(String name,Runnable r){TextView v=text(name,13,white,true);v.setGravity(Gravity.CENTER);v.setPadding(dp(18),dp(9),dp(18),dp(9));v.setBackground(shape(0xff25384B));v.setFocusable(true);v.setOnClickListener(w->r.run());v.setOnFocusChangeListener((w,b)->w.setBackground(shape(b?0xff176A69:0xff25384B)));return v;}
     @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);syncUrl=getPreferences(0).getString("sync_url", ""); deviceToken=getPreferences(0).getString("device_token", "");
-        build();setupSpeech();ui.post(tick);refreshAll();}
-    @Override public void onResume(){super.onResume();loadCalendar();}
+        favoritePrefs=getSharedPreferences("home",MODE_PRIVATE);build();setupSpeech();ui.post(tick);refreshAll();}
+    @Override public void onResume(){super.onResume();if(favoritePrefs!=null)renderApps();loadCalendar();}
     @Override public void onPause(){stopSpeaking();super.onPause();}
     @Override public void onDestroy(){ui.removeCallbacksAndMessages(null);if(speech!=null){speech.stop();speech.shutdown();speech=null;}super.onDestroy();}
     private void build(){
         ScrollView sc=new ScrollView(this);sc.setBackgroundColor(bg);sc.setFillViewport(true);sc.setVerticalScrollBarEnabled(false);
         LinearLayout root=vertical();root.setPadding(dp(34),dp(22),dp(34),dp(25));sc.addView(root);setContentView(sc);
         LinearLayout top=horizontal();top.setGravity(Gravity.CENTER_VERTICAL);root.addView(top);
-        LinearLayout greeting=vertical();top.addView(greeting,new LinearLayout.LayoutParams(0,-2,1));greeting.addView(text("GOOD EVENING  ·  JL02 TV",12,mint,true));
+        ImageView brand=new ImageView(this);brand.setImageResource(com.minimaltv.launcher.R.drawable.jl02_logo);brand.setScaleType(ImageView.ScaleType.FIT_CENTER);LinearLayout.LayoutParams brandLp=new LinearLayout.LayoutParams(dp(106),dp(68));brandLp.rightMargin=dp(16);top.addView(brand,brandLp);
+        LinearLayout greeting=vertical();top.addView(greeting,new LinearLayout.LayoutParams(0,-2,1));greeting.addView(text("JL02 TV  ·  YOUR DAILY BRIEFING",12,mint,true));
         TextView welcome=text("Welcome home.",31,white,true);greeting.addView(welcome);
         time=text("",14,muted,false);time.setPadding(dp(10),0,dp(16),0);top.addView(time);
-        voiceButton=action("▶  Listen to briefing",this::toggleSpeech);top.addView(voiceButton);top.addView(action("↻  Refresh",this::refreshAll));top.addView(action("▦  Apps",()->startActivity(new Intent(this,AppsActivity.class))));top.addView(action("☷  Calendars",this::showCalendarOptions));top.addView(action("⚙",()->startActivity(new Intent(Settings.ACTION_SETTINGS))));
-        gap(root,18);
+        voiceButton=action("▶  Listen to briefing",this::toggleSpeech);top.addView(voiceButton);top.addView(action("↻  Refresh",this::refreshAll));top.addView(action("▦  All Apps",()->startActivity(new Intent(this,AppsActivity.class))));top.addView(action("☷  Calendars",this::showCalendarOptions));top.addView(action("⚙",()->startActivity(new Intent(Settings.ACTION_SETTINGS))));
+        gap(root,13);
+        LinearLayout favSection=card();root.addView(favSection);header(favSection,"★  FAVORITE APPS","Press OK to launch · Hold OK to remove favorite");favoriteRow=horizontal();favSection.addView(favoriteRow);gap(root,10);
+        LinearLayout otherSection=card();root.addView(otherSection);header(otherSection,"ALL APPS · QUICK ACCESS","Hold OK to add a favorite · View all for more");appRow=horizontal();otherSection.addView(appRow);gap(root,12);renderApps();
         LinearLayout columns=horizontal();columns.setGravity(Gravity.TOP);root.addView(columns);
         LinearLayout news=card();columns.addView(news,new LinearLayout.LayoutParams(0,-2,46));
-        header(news,"WORLD IN THE LAST 24 HOURS","AI & technology  •  Markets  •  Malaysia  •  Trade");
+        header(news,"LATEST NEWS · WITH IMAGES","Past 24 hours  •  publisher images where available");
         newsStatus=text("Loading latest headlines…",11,mint,false);news.addView(newsStatus);newsRows=vertical();news.addView(newsRows);
         LinearLayout.LayoutParams midp=new LinearLayout.LayoutParams(0,-2,27);midp.leftMargin=dp(12);LinearLayout middle=vertical();columns.addView(middle,midp);
         LinearLayout weather=card();middle.addView(weather);header(weather,"KUALA LUMPUR WEATHER","Today · hourly outlook");
         weatherNow=text("Checking forecast…",26,white,true);weather.addView(weatherNow);
+        TextView sky=text("☀  ☁  ☂",29,mint,true);sky.setGravity(Gravity.CENTER);weather.addView(sky,new LinearLayout.LayoutParams(-1,dp(36)));android.animation.ObjectAnimator pulse=android.animation.ObjectAnimator.ofFloat(sky,"alpha",0.65f,1f);pulse.setDuration(2400);pulse.setRepeatCount(android.animation.ValueAnimator.INFINITE);pulse.setRepeatMode(android.animation.ValueAnimator.REVERSE);pulse.start();
         weatherStatus=text("Connecting to forecast provider",11,muted,false);weather.addView(weatherStatus);
         hourlyTitle=text("NEXT HOURS",11,mint,true);hourlyTitle.setPadding(0,dp(12),0,0);weather.addView(hourlyTitle);
         HorizontalScrollView hsc=new HorizontalScrollView(this);hsc.setHorizontalScrollBarEnabled(false);weather.addView(hsc);hourlyRows=horizontal();hsc.addView(hourlyRows);
@@ -108,21 +128,47 @@ public class MainActivity extends Activity {
     private void refreshAll(){newsStatus.setText("Updating feeds…");weatherStatus.setText("Updating forecast…");new Thread(this::fetchNews).start();new Thread(this::fetchWeather).start();loadCalendar();}
     private InputStream open(String url) throws Exception {HttpURLConnection c=(HttpURLConnection)new URL(url).openConnection();c.setConnectTimeout(8500);c.setReadTimeout(9000);c.setRequestProperty("User-Agent","JL02TV/2.2 (Android TV)");c.setInstanceFollowRedirects(true);if(c.getResponseCode()!=200)throw new Exception("HTTP "+c.getResponseCode());return c.getInputStream();}
     private String read(InputStream in)throws Exception{try(InputStream i=in){java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();byte[] b=new byte[4096];int n;while((n=i.read(b))!=-1){out.write(b,0,n);if(out.size()>650000)break;}return out.toString("UTF-8");}}
-    private static class Story {String title,link,category;long published;Story(String t,String l,String c,long p){title=t;link=l;category=c;published=p;}}
+    private static class Story {String title,link,category,image="";long published;Story(String t,String l,String c,long p){title=t;link=l;category=c;published=p;}}
     private void fetchNews(){
         List<Story> all=new ArrayList<>();String[][] topics={{"AI and technology","AI artificial intelligence technology"},{"Semiconductors","semiconductors chip supply chain"},{"Malaysia business","Malaysia economy business"},{"Global markets","world markets finance"},{"Trade & supply","Malaysia US trade tariffs electronics"}};
         for(String[] topic:topics){try{
             String q=URLEncoder.encode(topic[1]+" when:1d","UTF-8");String url="https://news.google.com/rss/search?q="+q+"&hl=en-MY&gl=MY&ceid=MY:en";
-            XmlPullParser x=Xml.newPullParser();try(InputStream stream=open(url)){x.setInput(stream,"UTF-8");boolean item=false;String tag="",title="",link="",date="";
+            XmlPullParser x=Xml.newPullParser();try(InputStream stream=open(url)){x.setInput(stream,"UTF-8");boolean item=false;String tag="",title="",link="",date="",picture="";
                 for(int e=x.getEventType();e!=XmlPullParser.END_DOCUMENT;e=x.next()){
-                    if(e==XmlPullParser.START_TAG){tag=x.getName();if("item".equals(tag)){item=true;title="";link="";date="";}}
+                    if(e==XmlPullParser.START_TAG){tag=x.getName();if(item && ("thumbnail".equals(tag)||"content".equals(tag)||"enclosure".equals(tag))){String candidate=x.getAttributeValue(null,"url");String type=x.getAttributeValue(null,"type");if(candidate!=null && candidate.startsWith("https://") && (type==null || type.startsWith("image/")))picture=candidate;}if("item".equals(tag)){item=true;title="";link="";date="";picture="";}}
                     else if(e==XmlPullParser.TEXT&&item){String s=x.getText();if("title".equals(tag))title+=s;else if("link".equals(tag))link+=s;else if("pubDate".equals(tag))date+=s;}
-                    else if(e==XmlPullParser.END_TAG){String end=x.getName();if("item".equals(end)){long ts=0;try{ts=new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z",Locale.US).parse(date).getTime();}catch(Exception ignored){}if(ts>System.currentTimeMillis()-86400000L&&title.length()>10&&all.size()<20)all.add(new Story(title,link,topic[0],ts));item=false;}tag="";}
+                    else if(e==XmlPullParser.END_TAG){String end=x.getName();if("item".equals(end)){long ts=0;try{ts=new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z",Locale.US).parse(date).getTime();}catch(Exception ignored){}if(ts>System.currentTimeMillis()-86400000L&&title.length()>10&&all.size()<20){Story story=new Story(title,link,topic[0],ts);story.image=picture;all.add(story);}item=false;}tag="";}
                 }
             }
         }catch(Exception ignored){} }
-        ui.post(()->{newsRows.removeAllViews();if(all.isEmpty()){newsStatus.setText("Live headlines unavailable · Check internet and retry");line(newsRows,"No cached or invented headlines are displayed.",13,muted);topHeadlines.clear();newsNote="News feeds unavailable";}else{newsStatus.setText("Updated now · news published within 24 hours");int count=0;for(Story s:all){if(count++>=8)break;LinearLayout item=vertical();item.setPadding(dp(5),dp(9),dp(5),dp(11));item.addView(text(s.category.toUpperCase(Locale.US),10,mint,true));item.addView(text(s.title,14,white,true));String when=new SimpleDateFormat("HH:mm",Locale.ENGLISH).format(new Date(s.published));item.addView(text("Published "+when+" · OK to open story",10,muted,false));focus(item);item.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(s.link)));}catch(Exception ignored){}});newsRows.addView(item);}topHeadlines.clear();for(int i=0;i<Math.min(5,all.size());i++)topHeadlines.add(all.get(i).title);newsNote=all.size()+" recent news headlines available";}updateSummary();});
+        ui.post(()->{newsRows.removeAllViews();if(all.isEmpty()){newsStatus.setText("Live headlines unavailable · Check internet and retry");line(newsRows,"No cached or invented headlines are displayed.",13,muted);topHeadlines.clear();newsNote="News feeds unavailable";}else{newsStatus.setText("Updated now · news published within 24 hours");int count=0;for(Story s:all){if(count++>=8)break;LinearLayout item=horizontal();item.setGravity(Gravity.CENTER_VERTICAL);item.setPadding(dp(5),dp(7),dp(5),dp(8));
+            ImageView thumb=new ImageView(this);thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);thumb.setBackground(shape(0xff24334B));LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(dp(104),dp(67));ip.rightMargin=dp(12);item.addView(thumb,ip);
+            LinearLayout details=vertical();item.addView(details,new LinearLayout.LayoutParams(0,-2,1));details.addView(text(s.category.toUpperCase(Locale.US),10,mint,true));TextView headline=text(s.title,13,white,true);headline.setMaxLines(2);headline.setEllipsize(TextUtils.TruncateAt.END);details.addView(headline);String when=new SimpleDateFormat("HH:mm",Locale.ENGLISH).format(new Date(s.published));details.addView(text("Published "+when+" · OK to open",10,muted,false));
+            if(s.image!=null && s.image.startsWith("https://"))loadThumbnail(s.image,thumb);
+            focus(item);item.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(s.link)));}catch(Exception ignored){}});newsRows.addView(item);}topHeadlines.clear();for(int i=0;i<Math.min(5,all.size());i++)topHeadlines.add(all.get(i).title);newsNote=all.size()+" recent news headlines available";}updateSummary();});
     }
+    private void loadThumbnail(String imageUrl, ImageView image){new Thread(()->{try{
+        HttpURLConnection c=(HttpURLConnection)new URL(imageUrl).openConnection();c.setConnectTimeout(4500);c.setReadTimeout(4500);c.setRequestProperty("User-Agent","JL02TV/2.4");c.connect();String mime=c.getContentType();if(mime==null||!mime.startsWith("image/"))return;
+        BitmapFactory.Options opts=new BitmapFactory.Options();opts.inSampleSize=2;Bitmap b;try(InputStream in=c.getInputStream()){b=BitmapFactory.decodeStream(in,null,opts);}if(b!=null)ui.post(()->image.setImageBitmap(b));
+    }catch(Exception ignored){}}).start();}
+
+    private Set<String> favorites(){return new HashSet<>(favoritePrefs.getStringSet("favorites",Collections.emptySet()));}
+    private void flipFavorite(String pkg){Set<String> f=favorites();if(!f.add(pkg))f.remove(pkg);favoritePrefs.edit().putStringSet("favorites",f).apply();renderApps();}
+    private void renderApps(){if(favoriteRow==null||appRow==null)return;
+        installedApps.clear();PackageManager pm=getPackageManager();List<ResolveInfo> found=new ArrayList<>();Intent tv=new Intent(Intent.ACTION_MAIN);tv.addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);found.addAll(pm.queryIntentActivities(tv,0));Intent other=new Intent(Intent.ACTION_MAIN);other.addCategory(Intent.CATEGORY_LAUNCHER);found.addAll(pm.queryIntentActivities(other,0));Set<String> seen=new HashSet<>();
+        for(ResolveInfo ri:found){if(ri.activityInfo==null)continue;String pkg=ri.activityInfo.packageName;if(pkg.equals(getPackageName())||!seen.add(pkg))continue;TVApp a=new TVApp();a.pkg=pkg;a.title=ri.loadLabel(pm).toString();a.icon=ri.loadIcon(pm);a.intent=pm.getLeanbackLaunchIntentForPackage(pkg);if(a.intent==null)a.intent=pm.getLaunchIntentForPackage(pkg);if(a.intent!=null)installedApps.add(a);}
+        Collections.sort(installedApps,(a,b)->a.title.compareToIgnoreCase(b.title));Set<String> f=favorites();List<TVApp> pinned=new ArrayList<>();for(TVApp a:installedApps)if(f.contains(a.pkg))pinned.add(a);
+        if(pinned.isEmpty()){String[] defaults={"youtube","netflix","primevideo","disney","spotify","vlc","kodi"};for(String search:defaults){for(TVApp a:installedApps)if(a.pkg.toLowerCase(Locale.US).contains(search)&&!pinned.contains(a)){pinned.add(a);break;}if(pinned.size()>=6)break;}}
+        favoriteRow.removeAllViews();appRow.removeAllViews();for(int i=0;i<Math.min(7,pinned.size());i++){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(116),1);lp.rightMargin=dp(9);favoriteRow.addView(appTile(pinned.get(i),true),lp);}
+        if(pinned.isEmpty())favoriteRow.addView(action("Choose an app below and hold OK to add it",()->startActivity(new Intent(this,AppsActivity.class))));
+        int shown=0;for(TVApp a:installedApps){if(shown>=9)break;if(f.contains(a.pkg))continue;LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(78),1);lp.rightMargin=dp(8);appRow.addView(appTile(a,false),lp);shown++;}appRow.addView(action("+ All Apps",()->startActivity(new Intent(this,AppsActivity.class))));
+    }
+    private FrameLayout appTile(TVApp a,boolean favorite){FrameLayout tile=new FrameLayout(this);tile.setBackground(shape(0xff172437));tile.setFocusable(true);tile.setClickable(true);
+        LinearLayout content=vertical();content.setGravity(Gravity.CENTER);content.setPadding(dp(4),dp(5),dp(4),dp(4));tile.addView(content,new FrameLayout.LayoutParams(-1,-1));ImageView icon=new ImageView(this);icon.setImageDrawable(a.icon);content.addView(icon,new LinearLayout.LayoutParams(dp(favorite?64:35),dp(favorite?64:35)));TextView title=text(a.title,favorite?12:10,white,true);title.setGravity(Gravity.CENTER);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);content.addView(title,new LinearLayout.LayoutParams(-1,dp(26)));
+        if(favorite){TextView star=text("★",10,0xffFFD900,true);FrameLayout.LayoutParams sp=new FrameLayout.LayoutParams(dp(17),dp(19),Gravity.TOP|Gravity.RIGHT);sp.rightMargin=dp(6);sp.topMargin=dp(3);tile.addView(star,sp);}
+        tile.setOnClickListener(v->{try{startActivity(a.intent);}catch(Exception ignored){}});tile.setOnLongClickListener(v->{flipFavorite(a.pkg);return true;});tile.setOnKeyListener((v,key,e)->{if(e.getAction()==KeyEvent.ACTION_UP&&(key==KeyEvent.KEYCODE_MENU||key==KeyEvent.KEYCODE_INFO)){flipFavorite(a.pkg);return true;}return false;});tile.setOnFocusChangeListener((v,b)->{tile.setBackground(shape(b?0xff8B6900:0xff172437));tile.setScaleX(b?1.04f:1f);tile.setScaleY(b?1.04f:1f);});return tile;
+    }
+
     private void fetchWeather(){try{
         // KL default coordinates; no location permissions or device tracking necessary.
         String url="https://api.open-meteo.com/v1/forecast?latitude=3.1390&longitude=101.6869&timezone=Asia%2FKuala_Lumpur&current=temperature_2m,relative_humidity_2m,weather_code&hourly=temperature_2m,precipitation_probability,weather_code&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code&forecast_days=4";
@@ -136,10 +182,9 @@ public class MainActivity extends Activity {
         final int rain=max;ui.post(()->{highRain=rain;weatherNow.setText(temperature+"°C  ·  "+humid+"% humidity");weatherStatus.setText("Today · hourly precipitation outlook");hourlyRows.removeAllViews();for(String[] h:hourList){LinearLayout col=vertical();col.setPadding(dp(11),dp(8),dp(11),dp(8));col.addView(text(h[0],11,muted,true));col.addView(text(h[1],18,white,true));col.addView(text("☂ "+h[2],11,mint,false));hourlyRows.addView(col);}threeDays.removeAllViews();for(String[] d:dayList){line(threeDays,d[0]+"   "+d[1]+"   ☂ "+d[2],12,white);}todayForecast="Currently "+temperature+" degrees Celsius with "+humid+" percent humidity. Today peak hourly rain chance is "+rain+" percent.";StringBuilder next=new StringBuilder();for(String[] d:dayList)next.append(d[0]).append(": ").append(d[1].replace("°", " degrees ")).append(", ").append(d[2]).append(". ");nextForecast=next.toString();weatherNote=rain>=60?"Possible heavy rain today (up to "+rain+"% hourly probability)":"Today's maximum hourly rain chance: "+rain+"%";updateSummary();});
         }catch(Exception e){ui.post(()->{weatherNow.setText("Forecast unavailable");weatherStatus.setText("Connect to internet, then select Refresh");weatherNote="Weather not updated";todayForecast="Forecast unavailable";nextForecast="Three-day forecast unavailable";updateSummary();});}}
     private void showCalendarOptions(){
-        String[] opts={"Connect Google / Outlook (QR)","Set secure sync server URL", "Refresh schedule", "Disconnect an account", "Speak non-private meeting titles: "+(speakMeetingTitles?"ON":"OFF"),"Unlink this TV"};
+        String[] opts={"Connect Google / Outlook (QR)","Set secure sync server URL", "Test calendar server connection", "Refresh schedule", "Disconnect an account", "Speak non-private meeting titles: "+(speakMeetingTitles?"ON":"OFF"),"Unlink this TV"};
         new AlertDialog.Builder(this).setTitle("JL02 TV · Calendars").setItems(opts,(d,which)->{
-            switch(which){case 0: beginPairing();break;case 1: configureServer();break;case 2:loadCalendar();break;
-            case 3:chooseDisconnect();break;case 4:speakMeetingTitles=!speakMeetingTitles;break;case 5:unlinkTV();break;}
+            switch(which){case 0: beginPairing();break;case 1: configureServer();break;case 2:testServerConnection();break;case 3:loadCalendar();break;case 4:chooseDisconnect();break;case 5:speakMeetingTitles=!speakMeetingTitles;break;case 6:unlinkTV();break;}
         }).setNegativeButton("Close",null).show();
     }
     private void configureServer(){EditText input=new EditText(this);input.setSingleLine();input.setText(syncUrl);input.setHint("https://your-secure-service.example");
@@ -148,6 +193,15 @@ public class MainActivity extends Activity {
             if(!u.startsWith("https://")){message("HTTPS is required");return;}
             if(!u.equals(syncUrl)){syncUrl=u;deviceToken="";storeConnection();}loadCalendar();
         }).setNegativeButton("Cancel",null).show();}
+    private void testServerConnection(){
+        if(syncUrl.isEmpty()){message("Set your deployed HTTPS calendar server URL first. The APK does not host the calendar server.");return;}
+        new Thread(()->{try{
+            JSONObject health=new JSONObject(read(open(syncUrl+"/health")));
+            boolean google=health.optBoolean("google_configured"),microsoft=health.optBoolean("microsoft_configured");
+            String result="Server reachable: "+health.optString("status","unknown")+"\nGoogle OAuth: "+(google?"configured":"NOT configured")+"\nMicrosoft OAuth: "+(microsoft?"configured":"NOT configured")+"\n\nIf a provider isn't configured, add its OAuth client credentials to the server, not the TV.";
+            ui.post(()->message(result));
+        }catch(Exception e){ui.post(()->message("Calendar server not reachable. Verify the HTTPS URL, certificate, internet access, and deployed backend.\n\n"+e.getMessage()));}}).start();
+    }
     private void storeConnection(){getPreferences(0).edit().putString("sync_url",syncUrl).putString("device_token",deviceToken).apply();}
     private void message(String m){new AlertDialog.Builder(this).setMessage(m).setPositiveButton("OK",null).show();}
     private JSONObject api(String method,String path,JSONObject data) throws Exception{
@@ -161,7 +215,7 @@ public class MainActivity extends Activity {
     }
     private void ensureDevice() throws Exception{if(deviceToken.isEmpty()){
         deviceToken=api("POST","/v1/device",new JSONObject()).getString("device_token");storeConnection();}}
-    private void beginPairing(){if(syncUrl.isEmpty()){configureServer();return;}
+    private void beginPairing(){if(syncUrl.isEmpty()){message("First deploy your calendar backend, then select Set secure sync server URL. The QR code cannot log in without the backend.");configureServer();return;}
         new Thread(()->{try{ensureDevice();String link=api("POST","/v1/pair",new JSONObject()).getString("url");ui.post(()->showPairQR(link));}
         catch(Exception e){ui.post(()->message("Could not begin pairing: "+e.getMessage()));}}).start();}
     private void showPairQR(String link){try{
@@ -170,7 +224,7 @@ public class MainActivity extends Activity {
         for(int y=0;y<360;y++)for(int x=0;x<360;x++)bitmap.setPixel(x,y,bits.get(x,y)?android.graphics.Color.BLACK:android.graphics.Color.WHITE);
         ImageView image=new ImageView(this);image.setImageBitmap(bitmap);image.setPadding(dp(30),dp(20),dp(30),dp(20));
         new AlertDialog.Builder(this).setTitle("Scan with your phone · expires in 10 minutes").setView(image)
-            .setMessage("Choose Google or Microsoft in your phone browser. Then select Refresh schedule on the TV.")
+            .setMessage("Scan the QR with your phone. If scanning fails, use this link shown below:\n"+link+"\n\nThe link must use your deployed HTTPS server. Then select Refresh schedule on the TV.")
             .setPositiveButton("Refresh schedule",(d,w)->loadCalendar()).setNegativeButton("Close",null).show();
         }catch(Exception e){message("Open on phone: "+link);}}
     private void syncCalendar(){new Thread(()->{try{

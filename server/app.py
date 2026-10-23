@@ -43,6 +43,13 @@ def device(auth):
 def page(title,body):
  return HTMLResponse('<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="referrer" content="no-referrer"><style>body{font:17px system-ui;background:#101927;color:#fff;max-width:480px;margin:55px auto;padding:20px}a,button{display:block;background:#126c62;color:#fff;text-decoration:none;padding:16px;border-radius:12px;margin:14px 0;border:0}small{color:#aab}</style><h2>'+html.escape(title)+'</h2>'+body)
 
+@app.get('/health')
+def health():
+ # No secrets or sensitive account information are exposed.
+ return {'service':'JL02 TV Calendar Service','status':'ok',
+         'google_configured':bool(PROVIDERS['google']['client'] and PROVIDERS['google']['secret']),
+         'microsoft_configured':bool(PROVIDERS['microsoft']['client'] and PROVIDERS['microsoft']['secret'])}
+
 @app.post('/v1/device')
 def register():
  did=secrets.token_urlsafe(24);token=secrets.token_urlsafe(48)
