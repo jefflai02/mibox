@@ -72,7 +72,7 @@ public class MainActivity extends Activity {
     private String todayForecast="Forecast loading", nextForecast="Three-day forecast loading";
     private volatile String newsNote="News loading", weatherNote="Forecast loading";
     private final List<TVApp> installedApps=new ArrayList<>();
-    private SharedPreferences favoritePrefs;
+    private SharedPreferences favoritePrefs; private MicrosoftCalendar microsoft;
     private static class TVApp {String pkg,title; Drawable icon; Intent intent;}
     private int highRain=0; private final List<String> meetings=new ArrayList<>();
     private final Runnable tick=new Runnable(){@Override public void run(){ if(time!=null) time.setText(new SimpleDateFormat("EEE, d MMM  •  HH:mm",Locale.ENGLISH).format(new Date()));ui.postDelayed(this,30000); }};
@@ -88,8 +88,8 @@ public class MainActivity extends Activity {
     private void line(LinearLayout p,String s,int sp,int color){TextView t=text(s,sp,color,false);t.setPadding(0,dp(7),0,dp(7));p.addView(t);}
     private void focus(View v){v.setFocusable(true);v.setOnFocusChangeListener((w,b)->{w.setBackground(shape(b?0xff23525E:panel));w.setScaleX(b?1.015f:1);w.setScaleY(b?1.015f:1);});}
     private TextView action(String name,Runnable r){TextView v=text(name,13,white,true);v.setGravity(Gravity.CENTER);v.setPadding(dp(18),dp(9),dp(18),dp(9));v.setBackground(shape(0xff25384B));v.setFocusable(true);v.setOnClickListener(w->r.run());v.setOnFocusChangeListener((w,b)->w.setBackground(shape(b?0xff176A69:0xff25384B)));return v;}
-    @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);syncUrl=getPreferences(0).getString("sync_url", ""); deviceToken=getPreferences(0).getString("device_token", "");
-        favoritePrefs=getSharedPreferences("home",MODE_PRIVATE);build();setupSpeech();ui.post(tick);refreshAll();}
+    @Override public void onCreate(Bundle b){super.onCreate(b);getWindow().getDecorView().setSystemUiVisibility(5894|1024|512);syncUrl=BuildConfig.CALENDAR_SERVICE_URL.trim().replaceAll("/+$", ""); deviceToken=getPreferences(0).getString("device_token", "");
+        favoritePrefs=getSharedPreferences("home",MODE_PRIVATE);microsoft=new MicrosoftCalendar(this);build();setupSpeech();ui.post(tick);refreshAll();}
     @Override public void onResume(){super.onResume();if(favoritePrefs!=null)renderApps();loadCalendar();}
     @Override public void onPause(){stopSpeaking();super.onPause();}
     @Override public void onDestroy(){ui.removeCallbacksAndMessages(null);if(speech!=null){speech.stop();speech.shutdown();speech=null;}super.onDestroy();}
@@ -121,12 +121,13 @@ public class MainActivity extends Activity {
         HorizontalScrollView hsc=new HorizontalScrollView(this);hsc.setHorizontalScrollBarEnabled(false);weather.addView(hsc,new LinearLayout.LayoutParams(-1,dp(62)));hourlyRows=horizontal();hsc.addView(hourlyRows);
         threeDays=vertical();weather.addView(threeDays);
         LinearLayout.LayoutParams rp=new LinearLayout.LayoutParams(0,-1,51);rp.leftMargin=dp(10);LinearLayout calendar=card();duo.addView(calendar,rp);
-        header(calendar,"▦  CALENDAR & SCHEDULE","Google + Outlook · privacy-first");
+        header(calendar,"▦  CALENDAR & SCHEDULE","Microsoft 365 · direct phone sign-in");
         LinearLayout calInner=horizontal();calendar.addView(calInner,new LinearLayout.LayoutParams(-1,0,1));
         LinearLayout pair=vertical();pair.setPadding(dp(8),dp(5),dp(12),dp(4));calInner.addView(pair,new LinearLayout.LayoutParams(0,-1,45));
-        pair.addView(text("Connect calendars",16,white,true));line(pair,"Secure QR pairing via your phone",11,muted);
-        TextView connect=action("▦  Pair with QR",this::beginPairing);pair.addView(connect);
-        line(pair,"Requires a configured HTTPS calendar sync server. Never enter passwords on the TV.",10,muted);
+        pair.addView(text("Work calendar",16,white,true));
+        line(pair,microsoft.isConfigured()?"Sign in on your phone · no NAS":"Microsoft app ID not configured",11,muted);
+        TextView connect=action("▦  Microsoft 365 sign-in",this::connectMicrosoft);pair.addView(connect);
+        line(pair,"Work calendar read-only · private events hidden",10,muted);
         LinearLayout agenda=vertical();calInner.addView(agenda,new LinearLayout.LayoutParams(0,-1,55));
         agenda.addView(text("TODAY'S SCHEDULE",13,mint,true));calendarStatus=text("Checking calendars…",10,muted,false);agenda.addView(calendarStatus);
         ScrollView listScroll=new ScrollView(this);listScroll.setVerticalScrollBarEnabled(false);agenda.addView(listScroll,new LinearLayout.LayoutParams(-1,0,1));scheduleRows=vertical();listScroll.addView(scheduleRows);
@@ -211,10 +212,14 @@ public class MainActivity extends Activity {
         for(int i=1;i<Math.min(4,dtime.length());i++)dayList.add(new String[]{dtime.getString(i),Math.round(dhi.getDouble(i))+"° / "+Math.round(dlo.getDouble(i))+"°",drain.optInt(i)+"% rain"});
         final int rain=max;ui.post(()->{highRain=rain;weatherNow.setText(temperature+"°C  ·  "+humid+"% humidity");weatherStatus.setText("Today · hourly precipitation outlook");hourlyRows.removeAllViews();for(String[] h:hourList){LinearLayout col=vertical();col.setPadding(dp(11),dp(8),dp(11),dp(8));col.addView(text(h[0],11,muted,true));col.addView(text(h[1],18,white,true));col.addView(text("☂ "+h[2],11,mint,false));hourlyRows.addView(col);}threeDays.removeAllViews();for(String[] d:dayList){line(threeDays,d[0].substring(5)+"  "+d[1]+"  ☂ "+d[2],10,white);}todayForecast="Currently "+temperature+" degrees Celsius with "+humid+" percent humidity. Today peak hourly rain chance is "+rain+" percent.";StringBuilder next=new StringBuilder();for(String[] d:dayList)next.append(d[0]).append(": ").append(d[1].replace("°", " degrees ")).append(", ").append(d[2]).append(". ");nextForecast=next.toString();weatherNote=rain>=60?"Possible heavy rain today (up to "+rain+"% hourly probability)":"Today's maximum hourly rain chance: "+rain+"%";updateSummary();});
         }catch(Exception e){ui.post(()->{weatherNow.setText("Forecast unavailable");weatherStatus.setText("Connect to internet, then select Refresh");weatherNote="Weather not updated";todayForecast="Forecast unavailable";nextForecast="Three-day forecast unavailable";updateSummary();});}}
+    private void connectMicrosoft(){
+        if(!microsoft.isConfigured()){message("This APK needs a Microsoft application ID set once at GitHub build time. See MICROSOFT-SETUP.md. No company password or server is needed on the TV.");return;}
+        microsoft.signIn(()->loadCalendar());
+    }
     private void showCalendarOptions(){
-        String[] opts={"Connect Google / Outlook (QR)","Set secure sync server URL", "Test calendar server connection", "Refresh schedule", "Disconnect an account", "Speak non-private meeting titles: "+(speakMeetingTitles?"ON":"OFF"),"Unlink this TV"};
-        new AlertDialog.Builder(this).setTitle("JL02 TV · Calendars").setItems(opts,(d,which)->{
-            switch(which){case 0: beginPairing();break;case 1: configureServer();break;case 2:testServerConnection();break;case 3:loadCalendar();break;case 4:chooseDisconnect();break;case 5:speakMeetingTitles=!speakMeetingTitles;break;case 6:unlinkTV();break;}
+        String[] opts={"Connect Microsoft 365 on my phone","Refresh work schedule","Disconnect Microsoft 365","Use calendar on this TV","Speak meeting titles: "+(speakMeetingTitles?"ON":"OFF")};
+        new AlertDialog.Builder(this).setTitle("JL02 TV · Calendar").setItems(opts,(d,i)->{
+            switch(i){case 0:connectMicrosoft();break;case 1:loadCalendar();break;case 2:microsoft.disconnect();meetings.clear();loadCalendar();break;case 3:requestCalendar();break;case 4:speakMeetingTitles=!speakMeetingTitles;break;}
         }).setNegativeButton("Close",null).show();
     }
     private void configureServer(){EditText input=new EditText(this);input.setSingleLine();input.setText(syncUrl);input.setHint("https://your-secure-service.example");
@@ -232,7 +237,7 @@ public class MainActivity extends Activity {
             ui.post(()->message(result));
         }catch(Exception e){ui.post(()->message("Calendar server not reachable. Verify the HTTPS URL, certificate, internet access, and deployed backend.\n\n"+e.getMessage()));}}).start();
     }
-    private void storeConnection(){getPreferences(0).edit().putString("sync_url",syncUrl).putString("device_token",deviceToken).apply();}
+    private void storeConnection(){getPreferences(0).edit().putString("device_token",deviceToken).apply();}
     private void message(String m){new AlertDialog.Builder(this).setMessage(m).setPositiveButton("OK",null).show();}
     private JSONObject api(String method,String path,JSONObject data) throws Exception{
         java.net.HttpURLConnection c=(java.net.HttpURLConnection)new java.net.URL(syncUrl+path).openConnection();
@@ -245,7 +250,7 @@ public class MainActivity extends Activity {
     }
     private void ensureDevice() throws Exception{if(deviceToken.isEmpty()){
         deviceToken=api("POST","/v1/device",new JSONObject()).getString("device_token");storeConnection();}}
-    private void beginPairing(){if(syncUrl.isEmpty()){message("First deploy your calendar backend, then select Set secure sync server URL. The QR code cannot log in without the backend.");configureServer();return;}
+    private void beginPairing(){if(syncUrl.isEmpty()){message("Google / Outlook pairing is not active in this build. No link entry is required. You can use calendars already on the TV from Calendar options.");return;}
         new Thread(()->{try{ensureDevice();String link=api("POST","/v1/pair",new JSONObject()).getString("url");ui.post(()->showPairQR(link));}
         catch(Exception e){ui.post(()->message("Could not begin pairing: "+e.getMessage()));}}).start();}
     private void showPairQR(String link){try{
@@ -282,7 +287,22 @@ public class MainActivity extends Activity {
             ui.post(()->{deviceToken="";storeConnection();meetings.clear();loadCalendar();});}).start()).setNegativeButton("Cancel",null).show();}
     private void requestCalendar(){if(android.os.Build.VERSION.SDK_INT>=23 && checkSelfPermission(Manifest.permission.READ_CALENDAR)!=PackageManager.PERMISSION_GRANTED){requestPermissions(new String[]{Manifest.permission.READ_CALENDAR},50);}else loadCalendar();}
     @Override public void onRequestPermissionsResult(int r,String[] p,int[] g){super.onRequestPermissionsResult(r,p,g);if(r==50)loadCalendar();}
-    private void loadCalendar(){if(!syncUrl.isEmpty()){
+    private void loadCalendar(){
+        if(microsoft!=null && microsoft.isConnected()){
+            calendarStatus.setText("Updating Microsoft 365 calendar…");
+            microsoft.loadToday(result->{
+                scheduleRows.removeAllViews();meetings.clear();
+                if(result.error!=null){calendarStatus.setText("Microsoft calendar unavailable");line(scheduleRows,result.error,11,muted);}
+                else {meetings.addAll(result.events);calendarStatus.setText(result.events.size()+" work event(s) today");
+                    if(result.events.isEmpty())line(scheduleRows,"No meetings scheduled today",12,muted);
+                    for(String event:result.events)line(scheduleRows,event,12,white);}
+                updateSummary();
+            });return;
+        }
+        if(microsoft!=null&&microsoft.isConfigured()){
+            calendarStatus.setText("Microsoft 365 not connected");scheduleRows.removeAllViews();line(scheduleRows,"Choose Microsoft 365 sign-in",11,muted);return;
+        }
+        if(!syncUrl.isEmpty() && !syncUrl.startsWith("https://")){calendarStatus.setText("Secure calendar service configuration is invalid");return;} if(!syncUrl.isEmpty()){
         if(deviceToken.isEmpty()){calendarStatus.setText("Connect Google or Outlook to begin");scheduleRows.removeAllViews();return;}
         syncCalendar();return;}
         if(android.os.Build.VERSION.SDK_INT>=23&&checkSelfPermission(Manifest.permission.READ_CALENDAR)!=PackageManager.PERMISSION_GRANTED){calendarStatus.setText("Calendar permission not granted");scheduleRows.removeAllViews();line(scheduleRows,"Grant access to show your actual appointments.",12,muted);meetings.clear();updateSummary();return;}

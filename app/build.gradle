@@ -2,13 +2,16 @@ plugins { id 'com.android.application' }
 
 android {
     namespace 'com.minimaltv.launcher'
+    buildFeatures { buildConfig true }
     compileSdk 35
     defaultConfig {
         applicationId 'com.minimaltv.launcher'
+        buildConfigField 'String', 'MS_CLIENT_ID', '"' + (System.getenv('JL02_MS_CLIENT_ID') ?: '').trim().replace('\\','').replace('\"','') + '"'
+        buildConfigField 'String', 'CALENDAR_SERVICE_URL', '"' + (System.getenv('JL02_CALENDAR_URL') ?: '').replace('\\','').replace('\"','') + '"'
         minSdk 23
         targetSdk 28
-        versionCode 8
-        versionName '2.5'
+        versionCode 10
+        versionName '2.7'
     }
 }
 
