@@ -35,6 +35,7 @@ import android.os.Handler;
 import android.provider.CalendarContract;
 import android.provider.Settings;
 import android.speech.tts.TextToSpeech;
+import android.media.MediaPlayer;
 import android.speech.tts.UtteranceProgressListener;
 import android.view.Gravity;
 import android.view.View;
@@ -66,6 +67,7 @@ public class MainActivity extends Activity {
     private TextView time, weatherNow, weatherStatus, hourlyTitle, newsStatus, summary, calendarStatus;
     private LinearLayout newsRows, hourlyRows, threeDays, scheduleRows, favoriteRow, appRow;
     private TextToSpeech speech; private boolean speechReady=false, speaking=false; private TextView voiceButton;
+    private MediaPlayer naturalPlayer; private java.io.File audioCache;
     private final List<String> topHeadlines=new ArrayList<>();
     private String syncUrl=""; private String deviceToken=""; private boolean speakMeetingTitles=false;
     private final List<String> syncedAccounts=new ArrayList<>();
@@ -92,7 +94,7 @@ public class MainActivity extends Activity {
         favoritePrefs=getSharedPreferences("home",MODE_PRIVATE);microsoft=new MicrosoftCalendar(this);build();setupSpeech();ui.post(tick);refreshAll();}
     @Override public void onResume(){super.onResume();if(favoritePrefs!=null)renderApps();loadCalendar();}
     @Override public void onPause(){stopSpeaking();super.onPause();}
-    @Override public void onDestroy(){ui.removeCallbacksAndMessages(null);if(speech!=null){speech.stop();speech.shutdown();speech=null;}super.onDestroy();}
+    @Override public void onDestroy(){ui.removeCallbacksAndMessages(null);if(speech!=null){speech.stop();speech.shutdown();speech=null;} releaseNatural(); super.onDestroy();}
     private void build(){
         ScrollView sc=new ScrollView(this);sc.setBackgroundColor(bg);sc.setFillViewport(true);sc.setVerticalScrollBarEnabled(false);
         LinearLayout root=vertical();root.setPadding(dp(26),dp(14),dp(26),dp(16));sc.addView(root);setContentView(sc);
@@ -143,14 +145,14 @@ public class MainActivity extends Activity {
     private String read(InputStream in)throws Exception{try(InputStream i=in){java.io.ByteArrayOutputStream out=new java.io.ByteArrayOutputStream();byte[] b=new byte[4096];int n;while((n=i.read(b))!=-1){out.write(b,0,n);if(out.size()>650000)break;}return out.toString("UTF-8");}}
     private static class Story {String title,link,category,image="";long published;Story(String t,String l,String c,long p){title=t;link=l;category=c;published=p;}}
     private void fetchNews(){
-        List<Story> all=new ArrayList<>();String[][] topics={{"AI and technology","AI artificial intelligence technology"},{"Semiconductors","semiconductors chip supply chain"},{"Malaysia business","Malaysia economy business"},{"Global markets","world markets finance"},{"Trade & supply","Malaysia US trade tariffs electronics"}};
+        List<Story> all=new ArrayList<>();String[][] topics={{"Technology","https://feeds.bbci.co.uk/news/technology/rss.xml"},{"Business","https://feeds.bbci.co.uk/news/business/rss.xml"},{"World","https://feeds.bbci.co.uk/news/world/rss.xml"},{"Asia","https://feeds.bbci.co.uk/news/world/asia/rss.xml"}};
         for(String[] topic:topics){try{
-            String q=URLEncoder.encode(topic[1]+" when:1d","UTF-8");String url="https://news.google.com/rss/search?q="+q+"&hl=en-MY&gl=MY&ceid=MY:en";
+            String url=topic[1];
             XmlPullParser x=Xml.newPullParser();try(InputStream stream=open(url)){x.setInput(stream,"UTF-8");boolean item=false;String tag="",title="",link="",date="",picture="";
                 for(int e=x.getEventType();e!=XmlPullParser.END_DOCUMENT;e=x.next()){
                     if(e==XmlPullParser.START_TAG){tag=x.getName();if(item && ("thumbnail".equals(tag)||"content".equals(tag)||"enclosure".equals(tag))){String candidate=x.getAttributeValue(null,"url");String type=x.getAttributeValue(null,"type");if(candidate!=null && candidate.startsWith("https://") && (type==null || type.startsWith("image/")))picture=candidate;}if("item".equals(tag)){item=true;title="";link="";date="";picture="";}}
                     else if(e==XmlPullParser.TEXT&&item){String s=x.getText();if("title".equals(tag))title+=s;else if("link".equals(tag))link+=s;else if("pubDate".equals(tag))date+=s;}
-                    else if(e==XmlPullParser.END_TAG){String end=x.getName();if("item".equals(end)){long ts=0;try{ts=new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z",Locale.US).parse(date).getTime();}catch(Exception ignored){}if(ts>System.currentTimeMillis()-86400000L&&title.length()>10&&all.size()<20){Story story=new Story(title,link,topic[0],ts);story.image=picture;all.add(story);}item=false;}tag="";}
+                    else if(e==XmlPullParser.END_TAG){String end=x.getName();if("item".equals(end)){long ts=0;try{ts=new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss z",Locale.US).parse(date).getTime();}catch(Exception ignored){}if(ts>System.currentTimeMillis()-86400000L&&title.length()>10&&all.size()<32){Story story=new Story(title,link,topic[0],ts);story.image=picture;all.add(story);}item=false;}tag="";}
                 }
             }
         }catch(Exception ignored){} }
@@ -160,14 +162,14 @@ public class MainActivity extends Activity {
                 newsStatus.setText("Latest articles unavailable · Check network and tap Refresh");
                 line(newsRows,"No live articles are available. No simulated headlines are shown.",12,muted);newsNote="News unavailable";
             } else {
-                all.sort((a,b)->Long.compare(b.published,a.published));newsStatus.setText("Last 24 hours  ·  Headlines and publisher images when supplied");
+                all.sort((a,b)->Long.compare(b.published,a.published));newsStatus.setText("Last 24 hours  ·  BBC newsroom thumbnails where available");
                 for(int i=0;i<Math.min(4,all.size());i++){
                     Story s=all.get(i);topHeadlines.add(s.title);
                     LinearLayout tile=vertical();tile.setPadding(dp(6),dp(4),dp(6),dp(3));tile.setBackground(shape(0xff1C2B3A));
                     LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,-1,1);lp.rightMargin=dp(7);newsRows.addView(tile,lp);
                     ImageView thumb=new ImageView(this);thumb.setScaleType(ImageView.ScaleType.CENTER_CROP);thumb.setBackground(shape(0xff293B52));thumb.setContentDescription("Publisher image, if available");
                     tile.addView(thumb,new LinearLayout.LayoutParams(-1,dp(67)));
-                    if(s.image!=null&&s.image.startsWith("https://"))loadThumbnail(s.image,thumb);
+                    if(s.image!=null&&s.image.startsWith("https://"))loadThumbnail(s.image,thumb); else loadOpenGraphImage(s.link,thumb);
                     TextView headline=text(s.title,12,white,true);headline.setMaxLines(2);headline.setEllipsize(TextUtils.TruncateAt.END);tile.addView(headline,new LinearLayout.LayoutParams(-1,dp(39)));
                     tile.addView(text(s.category+"  ·  "+new SimpleDateFormat("HH:mm",Locale.ENGLISH).format(new Date(s.published)),9,mint,false));
                     tile.setFocusable(true);tile.setOnClickListener(v->{try{startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(s.link)));}catch(Exception ignored){}});
@@ -183,21 +185,30 @@ public class MainActivity extends Activity {
         BitmapFactory.Options opts=new BitmapFactory.Options();opts.inSampleSize=2;Bitmap b;try(InputStream in=c.getInputStream()){b=BitmapFactory.decodeStream(in,null,opts);}if(b!=null)ui.post(()->image.setImageBitmap(b));
     }catch(Exception ignored){}}).start();}
 
+    private void loadOpenGraphImage(String page,ImageView target){new Thread(()->{try{
+        if(page==null||!page.startsWith("https://"))return;
+        HttpURLConnection c=(HttpURLConnection)new URL(page).openConnection();c.setConnectTimeout(3600);c.setReadTimeout(3600);c.setInstanceFollowRedirects(true);c.setRequestProperty("User-Agent","Mozilla/5.0 JL02TV");
+        String type=c.getContentType();if(type==null||!type.toLowerCase(Locale.US).contains("html"))return;
+        byte[] bytes=new byte[120000];int n;try(InputStream in=c.getInputStream()){n=in.read(bytes);}if(n<=0)return;
+        String html=new String(bytes,0,n,"UTF-8");java.util.regex.Matcher m=java.util.regex.Pattern.compile("<meta[^>]+(?:property|name)=[\"'](?:og:image|twitter:image)[\"'][^>]+>",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(html);
+        if(m.find()){java.util.regex.Matcher u=java.util.regex.Pattern.compile("content=[\"']([^\"']+)",java.util.regex.Pattern.CASE_INSENSITIVE).matcher(m.group());if(u.find()){String img=u.group(1).replace("&amp;","&");if(img.startsWith("https://"))loadThumbnail(img,target);}}
+    }catch(Exception ignored) {}}).start();}
+
     private Set<String> favorites(){return new HashSet<>(favoritePrefs.getStringSet("favorites",Collections.emptySet()));}
     private void flipFavorite(String pkg){Set<String> f=favorites();if(!f.add(pkg))f.remove(pkg);favoritePrefs.edit().putStringSet("favorites",f).apply();renderApps();}
     private void renderApps(){if(favoriteRow==null||appRow==null)return;
         installedApps.clear();PackageManager pm=getPackageManager();List<ResolveInfo> found=new ArrayList<>();Intent tv=new Intent(Intent.ACTION_MAIN);tv.addCategory(Intent.CATEGORY_LEANBACK_LAUNCHER);found.addAll(pm.queryIntentActivities(tv,0));Intent other=new Intent(Intent.ACTION_MAIN);other.addCategory(Intent.CATEGORY_LAUNCHER);found.addAll(pm.queryIntentActivities(other,0));Set<String> seen=new HashSet<>();
-        for(ResolveInfo ri:found){if(ri.activityInfo==null)continue;String pkg=ri.activityInfo.packageName;if(pkg.equals(getPackageName())||!seen.add(pkg))continue;TVApp a=new TVApp();a.pkg=pkg;a.title=ri.loadLabel(pm).toString();a.icon=ri.loadIcon(pm);a.intent=pm.getLeanbackLaunchIntentForPackage(pkg);if(a.intent==null)a.intent=pm.getLaunchIntentForPackage(pkg);if(a.intent!=null)installedApps.add(a);}
+        for(ResolveInfo ri:found){if(ri.activityInfo==null)continue;String pkg=ri.activityInfo.packageName;if(pkg.equals(getPackageName())||!seen.add(pkg))continue;TVApp a=new TVApp();a.pkg=pkg;a.title=ri.loadLabel(pm).toString();a.icon=ri.loadIcon(pm); try {Drawable better=pm.getApplicationIcon(pkg);if(better!=null)a.icon=better;}catch(Exception ignored){}a.intent=pm.getLeanbackLaunchIntentForPackage(pkg);if(a.intent==null)a.intent=pm.getLaunchIntentForPackage(pkg);if(a.intent!=null)installedApps.add(a);}
         Collections.sort(installedApps,(a,b)->a.title.compareToIgnoreCase(b.title));Set<String> f=favorites();List<TVApp> pinned=new ArrayList<>();for(TVApp a:installedApps)if(f.contains(a.pkg))pinned.add(a);
         if(pinned.isEmpty()){String[] defaults={"youtube","netflix","primevideo","disney","spotify","vlc","kodi"};for(String search:defaults){for(TVApp a:installedApps)if(a.pkg.toLowerCase(Locale.US).contains(search)&&!pinned.contains(a)){pinned.add(a);break;}if(pinned.size()>=6)break;}}
-        favoriteRow.removeAllViews();appRow.removeAllViews();for(int i=0;i<Math.min(7,pinned.size());i++){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(99),1);lp.rightMargin=dp(9);favoriteRow.addView(appTile(pinned.get(i),true),lp);}
+        favoriteRow.removeAllViews();appRow.removeAllViews();for(int i=0;i<Math.min(6,pinned.size());i++){LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(105),1);lp.rightMargin=dp(9);favoriteRow.addView(appTile(pinned.get(i),true),lp);}
         if(pinned.isEmpty())favoriteRow.addView(action("Choose an app below and hold OK to add it",()->startActivity(new Intent(this,AppsActivity.class))));
         int shown=0;for(TVApp a:installedApps){if(shown>=7)break;if(f.contains(a.pkg))continue;LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(0,dp(69),1);lp.rightMargin=dp(8);appRow.addView(appTile(a,false),lp);shown++;}appRow.addView(action("+ All Apps",()->startActivity(new Intent(this,AppsActivity.class))));
     }
-    private FrameLayout appTile(TVApp a,boolean favorite){FrameLayout tile=new FrameLayout(this);tile.setBackground(shape(0xff172437));tile.setFocusable(true);tile.setClickable(true);
-        LinearLayout content=vertical();content.setGravity(Gravity.CENTER);content.setPadding(dp(4),dp(5),dp(4),dp(4));tile.addView(content,new FrameLayout.LayoutParams(-1,-1));ImageView icon=new ImageView(this);icon.setImageDrawable(a.icon);content.addView(icon,new LinearLayout.LayoutParams(dp(favorite?56:35),dp(favorite?56:35)));TextView title=text(a.title,favorite?12:10,white,true);title.setGravity(Gravity.CENTER);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);content.addView(title,new LinearLayout.LayoutParams(-1,dp(26)));
+    private FrameLayout appTile(TVApp a,boolean favorite){FrameLayout tile=new FrameLayout(this);tile.setBackground(shape(0xff121212));tile.setFocusable(true);tile.setClickable(true);
+        LinearLayout content=vertical();content.setGravity(Gravity.CENTER);content.setPadding(dp(3),dp(2),dp(3),dp(2));tile.addView(content,new FrameLayout.LayoutParams(-1,-1));ImageView icon=new ImageView(this);icon.setImageDrawable(a.icon);icon.setScaleType(ImageView.ScaleType.FIT_CENTER);content.addView(icon,new LinearLayout.LayoutParams(dp(favorite?76:41),dp(favorite?69:39)));TextView title=text(a.title,favorite?12:10,white,true);title.setGravity(Gravity.CENTER);title.setSingleLine(true);title.setEllipsize(TextUtils.TruncateAt.END);content.addView(title,new LinearLayout.LayoutParams(-1,dp(26)));
         if(favorite){TextView star=text("★",10,0xffFFD900,true);FrameLayout.LayoutParams sp=new FrameLayout.LayoutParams(dp(17),dp(19),Gravity.TOP|Gravity.RIGHT);sp.rightMargin=dp(6);sp.topMargin=dp(3);tile.addView(star,sp);}
-        tile.setOnClickListener(v->{try{startActivity(a.intent);}catch(Exception ignored){}});tile.setOnLongClickListener(v->{flipFavorite(a.pkg);return true;});tile.setOnKeyListener((v,key,e)->{if(e.getAction()==KeyEvent.ACTION_UP&&(key==KeyEvent.KEYCODE_MENU||key==KeyEvent.KEYCODE_INFO)){flipFavorite(a.pkg);return true;}return false;});tile.setOnFocusChangeListener((v,b)->{tile.setBackground(shape(b?0xff8B6900:0xff172437));tile.setScaleX(b?1.04f:1f);tile.setScaleY(b?1.04f:1f);});return tile;
+        tile.setOnClickListener(v->{try{startActivity(a.intent);}catch(Exception ignored){}});tile.setOnLongClickListener(v->{flipFavorite(a.pkg);return true;});tile.setOnKeyListener((v,key,e)->{if(e.getAction()==KeyEvent.ACTION_UP&&(key==KeyEvent.KEYCODE_MENU||key==KeyEvent.KEYCODE_INFO)){flipFavorite(a.pkg);return true;}return false;});tile.setOnFocusChangeListener((v,b)->{tile.setBackground(shape(b?0xff8B6900:0xff121212));tile.setScaleX(b?1.04f:1f);tile.setScaleY(b?1.04f:1f);});return tile;
     }
 
     private void fetchWeather(){try{
@@ -331,6 +342,7 @@ public class MainActivity extends Activity {
     }
     private void toggleSpeech(){
         if(speaking){stopSpeaking();return;}
+        if(!BuildConfig.VOICE_PROXY_URL.isEmpty()){playNaturalBriefing();return;}
         if(!speechReady || speech==null){voiceButton.setText("Install/enable Android Text-to-Speech");return;}
         String narration=createNarration();
         speaking=true;voiceButton.setText("■  Stop briefing");
@@ -338,8 +350,21 @@ public class MainActivity extends Activity {
         int result=speech.speak(narration,TextToSpeech.QUEUE_FLUSH,null,"jl02_tv_daily_briefing");
         if(result==TextToSpeech.ERROR){speaking=false;voiceButton.setText("▶  Voice unavailable");}
     }
+    private synchronized void releaseNatural(){try{if(naturalPlayer!=null){naturalPlayer.stop();naturalPlayer.release();naturalPlayer=null;}}catch(Exception ignored){} if(audioCache!=null){audioCache.delete();audioCache=null;}}
+    private void playNaturalBriefing(){
+        speaking=true;voiceButton.setText("◌  Preparing natural voice…");String narration=createNarration();
+        new Thread(()->{java.io.File cache=null;try{
+            URL url=new URL(BuildConfig.VOICE_PROXY_URL);if(!"https".equalsIgnoreCase(url.getProtocol()))throw new Exception("HTTPS required");
+            HttpURLConnection conn=(HttpURLConnection)url.openConnection();conn.setRequestMethod("POST");conn.setDoOutput(true);conn.setConnectTimeout(8000);conn.setReadTimeout(25000);conn.setRequestProperty("Content-Type","application/json");
+            byte[] payload=new JSONObject().put("text",narration).toString().getBytes("UTF-8");conn.getOutputStream().write(payload);
+            if(conn.getResponseCode()!=200)throw new Exception("Voice service HTTP "+conn.getResponseCode());
+            cache=java.io.File.createTempFile("jl02-voice-",".mp3",getCacheDir());try(InputStream in=conn.getInputStream();java.io.FileOutputStream f=new java.io.FileOutputStream(cache)){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)f.write(b,0,n);}
+            java.io.File file=cache;ui.post(()->{if(!speaking){file.delete();return;}try{audioCache=file;naturalPlayer=new MediaPlayer();naturalPlayer.setDataSource(file.getAbsolutePath());naturalPlayer.setOnCompletionListener(mp->{releaseNatural();speaking=false;voiceButton.setText("▶  Listen to briefing");});naturalPlayer.prepare();naturalPlayer.start();voiceButton.setText("■  Stop briefing");}catch(Exception e){releaseNatural();speaking=false;voiceButton.setText("▶  Voice unavailable");}});
+        }catch(Exception e){if(cache!=null)cache.delete();ui.post(()->{speaking=false;voiceButton.setText("▶  Voice offline · use local TTS");});}}
+        ).start();
+    }
     private void stopSpeaking(){
-        if(speech!=null)speech.stop();speaking=false;
+        releaseNatural();if(speech!=null)speech.stop();speaking=false;
         if(voiceButton!=null && speechReady)voiceButton.setText("▶  Listen to briefing");
     }
     private String createNarration(){

@@ -6,12 +6,13 @@ android {
     compileSdk 35
     defaultConfig {
         applicationId 'com.minimaltv.launcher'
+        buildConfigField 'String', 'VOICE_PROXY_URL', '"' + (System.getenv('JL02_VOICE_PROXY_URL') ?: '').trim().replace('\\','').replace('\"','') + '"'
         buildConfigField 'String', 'MS_CLIENT_ID', '"' + (System.getenv('JL02_MS_CLIENT_ID') ?: '').trim().replace('\\','').replace('\"','') + '"'
         buildConfigField 'String', 'CALENDAR_SERVICE_URL', '"' + (System.getenv('JL02_CALENDAR_URL') ?: '').replace('\\','').replace('\"','') + '"'
         minSdk 23
         targetSdk 28
-        versionCode 10
-        versionName '2.7'
+        versionCode 11
+        versionName '2.8'
     }
 }
 
